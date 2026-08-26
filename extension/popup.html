@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PotPlayer 播放桥设置</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #17191e;
+      --panel: #22252c;
+      --panel-2: #2b2f38;
+      --text: #f2f4f8;
+      --muted: #aeb5c2;
+      --accent: #79a7ff;
+      --accent-strong: #4e83e8;
+      --danger: #ff8c8c;
+      --border: rgba(255, 255, 255, .10);
+    }
+    * { box-sizing: border-box; }
+    body {
+      width: 390px;
+      margin: 0;
+      padding: 16px;
+      color: var(--text);
+      background: var(--bg);
+      font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+    h1 { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: .2px; }
+    .version { color: var(--muted); font-size: 11px; }
+    .section {
+      margin-top: 10px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--panel);
+    }
+    .section-title { margin-bottom: 10px; color: #dbe4f5; font-size: 12px; font-weight: 650; }
+    .switch-row, .check-row { display: flex; align-items: center; gap: 9px; cursor: pointer; }
+    .switch-row { justify-content: space-between; }
+    .switch-row span { font-size: 14px; font-weight: 600; }
+    input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent-strong); }
+    .field { display: grid; grid-template-columns: 1fr 106px; align-items: center; gap: 10px; margin-top: 9px; }
+    .field label { color: var(--muted); }
+    input[type="number"], input[type="text"] {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 7px 8px;
+      color: var(--text);
+      background: var(--panel-2);
+      outline: none;
+    }
+    input:focus { border-color: var(--accent); }
+    .hint { margin: 7px 0 0; color: var(--muted); font-size: 11px; }
+    .check-row { margin-top: 9px; color: #d9dee8; }
+    #origin-list { display: grid; gap: 6px; margin-bottom: 9px; }
+    .origin-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+    .origin-value {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      color: #e8edf8;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .origin-badge { color: var(--muted); font-size: 10px; }
+    .origin-remove, .secondary {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 7px;
+      color: var(--muted);
+      background: transparent;
+      cursor: pointer;
+    }
+    .origin-remove:hover, .secondary:hover { color: var(--text); background: var(--panel-2); }
+    .origin-add { display: grid; grid-template-columns: 1fr auto; gap: 6px; }
+    button.primary {
+      width: 100%;
+      margin-top: 12px;
+      border: 0;
+      border-radius: 8px;
+      padding: 9px 12px;
+      color: white;
+      background: var(--accent-strong);
+      font-weight: 650;
+      cursor: pointer;
+    }
+    button.primary:hover { background: #6092f4; }
+    button:disabled { cursor: wait; opacity: .6; }
+    .footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 25px; margin-top: 8px; }
+    #status { color: #9dd6a8; font-size: 11px; }
+    #status.error { color: var(--danger); }
+    .secondary { font-size: 11px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Emby/Jellyfin · PotPlayer</h1>
+    <span class="version" id="version"></span>
+  </header>
+
+  <section class="section">
+    <label class="switch-row">
+      <span>使用 PotPlayer 外部播放</span>
+      <input id="enabled" type="checkbox">
+    </label>
+    <p class="hint">关闭后立即保留网页原本的播放行为，无需再次点击保存。</p>
+  </section>
+
+  <section class="section">
+    <div class="section-title">播放与解析</div>
+    <div class="field">
+      <label for="maxPlaylistItems">播放列表上限</label>
+      <input id="maxPlaylistItems" type="number" min="1" max="4096" step="1">
+    </div>
+    <div class="field">
+      <label for="mediaSourceConcurrency">媒体源并发请求</label>
+      <input id="mediaSourceConcurrency" type="number" min="1" max="12" step="1">
+    </div>
+    <div class="field">
+      <label for="requestTimeoutSeconds">解析超时（秒）</label>
+      <input id="requestTimeoutSeconds" type="number" min="15" max="300" step="1">
+    </div>
+    <label class="check-row"><input id="skipUnavailable" type="checkbox">没有媒体源的项目跳过</label>
+    <label class="check-row"><input id="fallbackToBrowser" type="checkbox">桥接失败时回退网页播放</label>
+    <p class="hint">当前默认值：1024 项、6 路并发、120 秒超时。</p>
+  </section>
+
+  <section class="section">
+    <div class="section-title">允许使用的站点</div>
+    <div id="origin-list"></div>
+    <div class="origin-add">
+      <input id="new-origin" type="text" placeholder="https://media.example.com">
+      <button id="add-origin" class="secondary" type="button">添加</button>
+    </div>
+    <p class="hint">添加后 Chrome 会请求该站点权限；支持填写带路径的网址，实际按域名来源生效。</p>
+  </section>
+
+  <div class="footer">
+    <span id="status"></span>
+    <button id="reset" class="secondary" type="button">恢复默认</button>
+  </div>
+  <button id="save" class="primary" type="button">保存设置</button>
+
+  <script src="settings.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

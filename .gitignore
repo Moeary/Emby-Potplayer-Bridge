@@ -1,0 +1,20 @@
+# .NET build output
+.build/
+**/bin/
+**/obj/
+
+# Generated/native artifacts
+*.exe
+*.dll
+*.pdb
+*.deps.json
+*.runtimeconfig.json
+
+# Local/editor files
+*.user
+*.suo
+*.log
+
+# Runtime playlists
+*.m3u
+*.m3u8
