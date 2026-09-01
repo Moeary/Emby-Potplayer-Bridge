@@ -3,6 +3,7 @@
 .build/
 dist/
 .deploy/
+config.toml
 __pycache__/
 **/__pycache__/
 *.pyc
