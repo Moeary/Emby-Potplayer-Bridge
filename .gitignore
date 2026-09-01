@@ -1,5 +1,12 @@
-# .NET build output
+# Pixi and Python build output
+.pixi/
 .build/
+dist/
+.deploy/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
 **/bin/
 **/obj/
 

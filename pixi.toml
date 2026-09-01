@@ -1,0 +1,18 @@
+[workspace]
+name = "emby-potplayer-bridge"
+channels = ["conda-forge"]
+platforms = ["win-64"]
+
+[dependencies]
+python = ">=3.12,<3.13"
+
+[pypi-dependencies]
+pyinstaller = ">=6.10,<7"
+
+[tasks]
+host = "python native-host/main.py"
+test = "python -m unittest discover -s native-host/tests -p \"test_*.py\""
+test-host = "python -m unittest discover -s native-host/tests -p \"test_*.py\""
+build = "python scripts/build.py"
+deploy = "python scripts/deploy.py"
+clean = "python scripts/clean.py"
