@@ -18,6 +18,12 @@ PYINSTALLER_WORK = ROOT / ".build" / "pyinstaller"
 EXE_NAME = "PotPlayerBridgeHost.exe"
 
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
+
 def _remove_generated(path: Path) -> None:
     if path.is_dir():
         shutil.rmtree(path)
@@ -50,7 +56,7 @@ def build_native_host() -> Path:
         str(PYINSTALLER_WORK),
         str(HOST_SOURCE),
     ]
-    print("运行：" + " ".join(command))
+    print("Running: " + " ".join(command))
     subprocess.run(command, cwd=ROOT, check=True)
     executable = HOST_DIST / EXE_NAME
     if not executable.is_file():
@@ -70,8 +76,8 @@ def build() -> tuple[Path, Path]:
     DIST.mkdir(parents=True, exist_ok=True)
     executable = build_native_host()
     extension = copy_extension()
-    print(f"Native Host：{executable}")
-    print(f"扩展目录：{extension}")
+    print(f"Native Host: {executable}")
+    print(f"Extension directory: {extension}")
     return executable, extension
 
 
