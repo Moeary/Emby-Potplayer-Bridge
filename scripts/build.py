@@ -10,8 +10,8 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 DIST = ROOT / "dist"
-HOST_SOURCE = ROOT / "native-host" / "main.py"
-EXTENSION_SOURCE = ROOT / "extension"
+HOST_SOURCE = ROOT / "src" / "python-host" / "main.py"
+EXTENSION_SOURCE = ROOT / "src" / "chrome-extension"
 HOST_DIST = DIST / "native-host"
 EXTENSION_DIST = DIST / "extension"
 PYINSTALLER_WORK = ROOT / ".build" / "pyinstaller"

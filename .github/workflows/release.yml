@@ -42,9 +42,9 @@ jobs:
             throw "Release tag must match vMAJOR.MINOR.PATCH: $tag"
           }
           $version = $tag.Substring(1)
-          $manifest = Get-Content -Raw -LiteralPath 'extension/manifest.json' | ConvertFrom-Json
+          $manifest = Get-Content -Raw -LiteralPath 'src/chrome-extension/manifest.json' | ConvertFrom-Json
           if ($manifest.version -ne $version) {
-            throw "extension/manifest.json version ($($manifest.version)) does not match $tag"
+            throw "src/chrome-extension/manifest.json version ($($manifest.version)) does not match $tag"
           }
           "RELEASE_VERSION=$version" >> $env:GITHUB_ENV
 
