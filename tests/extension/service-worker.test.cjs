@@ -8,7 +8,12 @@ const vm = require('node:vm');
 const sourceDir = path.resolve(__dirname, '../../src/chrome-extension');
 
 function createWorker(overrides = {}) {
-    const values = { allowedOrigins: ['https://emby.moear.de'], ...overrides };
+    const values = {
+        enabled: true,
+        defaultPlayer: 'potplayer',
+        allowedOrigins: ['https://emby.moear.de'],
+        ...overrides,
+    };
     const nativeRequests = [];
     const registrations = [];
     let handleMessage;
@@ -70,7 +75,7 @@ function play(destination = 'potplayer') {
     };
 }
 
-test('固定 PotPlayer 请求不读取或受默认播放器状态影响', async () => {
+test('辅助 PotPlayer 请求不受默认播放器状态影响', async () => {
     const worker = createWorker({ enabled: false, defaultPlayer: 'web' });
     const response = await worker.send(play('potplayer'));
     assert.equal(response.ok, true);
@@ -78,13 +83,21 @@ test('固定 PotPlayer 请求不读取或受默认播放器状态影响', async 
     assert.equal(worker.nativeRequests[0].items[0].itemId, 'ep4');
 });
 
-test('内容脚本可以从后台读取不含播放器状态的统一设置', async () => {
+test('内容脚本可以从后台读取当前默认播放器状态', async () => {
     const worker = createWorker({ enabled: false, defaultPlayer: 'web' });
     const response = await worker.send({ type: 'get-settings' });
     assert.equal(response.ok, true);
-    assert.equal(response.settings.enabled, undefined);
-    assert.equal(response.settings.defaultPlayer, undefined);
+    assert.equal(response.settings.enabled, false);
+    assert.equal(response.settings.defaultPlayer, 'web');
     assert.equal(response.settings.allowedOrigins[0], 'https://emby.moear.de');
+});
+
+test('旧版 enabled 设置仍能恢复默认网页模式', async () => {
+    const worker = createWorker({ enabled: false, defaultPlayer: undefined });
+    const response = await worker.send({ type: 'get-settings' });
+    assert.equal(response.ok, true);
+    assert.equal(response.settings.enabled, false);
+    assert.equal(response.settings.defaultPlayer, 'web');
 });
 
 test('固定请求保留播放模式', async () => {

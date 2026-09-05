@@ -8,8 +8,8 @@
 - adapters/emby.js：Emby 服务识别与 /emby/videos 流地址适配。
 - adapters/jellyfin.js：Jellyfin 服务识别与 /Videos 流地址适配。
 - page-bridge.js：在页面主世界调用 Emby/Jellyfin 已有的 API。
-- content-script.js：捕获固定双按钮，分别转发网页播放或 Native Host。
-- playback-choice.js / playback-choice.css：生成网页/PotPlayer 连体入口，监听 SPA 页面与站点设置变化。
+- content-script.js：读取默认播放器设置，处理原始播放按钮和辅助按钮的网页/PotPlayer 分流。
+- playback-choice.js / playback-choice.css：在原始播放按钮旁生成网页/PotPlayer 连体辅助入口，监听 SPA 页面变化。
 - service-worker.js：Native Messaging 和动态站点脚本注册。
 
 可用 `node --test tests/extension/*.test.cjs` 运行后台回归测试；浏览器交互回归页位于仓库根目录 `tests/extension/fixture.html`（经本地 HTTP 服务打开）。

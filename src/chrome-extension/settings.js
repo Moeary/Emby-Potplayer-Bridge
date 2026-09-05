@@ -2,6 +2,8 @@
 
 (() => {
     const DEFAULTS = Object.freeze({
+        enabled: true,
+        defaultPlayer: 'potplayer',
         maxPlaylistItems: 1024,
         mediaSourceConcurrency: 6,
         requestTimeoutSeconds: 120,
@@ -40,7 +42,10 @@
             ? source.allowedOrigins
             : DEFAULTS.allowedOrigins;
         const allowedOrigins = [...new Set(rawOrigins.map(normalizeOrigin).filter(Boolean))];
+        const defaultPlayer = readDefaultPlayer(source);
         return {
+            defaultPlayer,
+            enabled: defaultPlayer === 'potplayer',
             maxPlaylistItems: clampInteger(source.maxPlaylistItems, DEFAULTS.maxPlaylistItems, 1, 4096),
             mediaSourceConcurrency: clampInteger(source.mediaSourceConcurrency, DEFAULTS.mediaSourceConcurrency, 1, 12),
             requestTimeoutSeconds: clampInteger(source.requestTimeoutSeconds, DEFAULTS.requestTimeoutSeconds, 15, 300),
@@ -50,6 +55,23 @@
             syncPlayback: source.syncPlayback !== false,
             allowedOrigins,
         };
+    }
+
+    function readBoolean(value, fallback) {
+        if (typeof value === 'boolean') return value;
+        if (typeof value === 'number') return value !== 0;
+        if (typeof value === 'string') {
+            const normalized = value.trim().toLowerCase();
+            if (['true', '1', 'yes', 'on', 'potplayer'].includes(normalized)) return true;
+            if (['false', '0', 'no', 'off', 'web'].includes(normalized)) return false;
+        }
+        return fallback;
+    }
+
+    function readDefaultPlayer(source) {
+        const configured = String(source.defaultPlayer || '').trim().toLowerCase();
+        if (configured === 'web' || configured === 'potplayer') return configured;
+        return readBoolean(source.enabled, DEFAULTS.enabled) ? 'potplayer' : 'web';
     }
 
     globalThis.PotPlayerSettings = Object.freeze({ DEFAULTS, normalize, normalizeOrigin });

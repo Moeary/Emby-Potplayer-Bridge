@@ -4,8 +4,6 @@
     const GROUP_SELECTOR = '[data-potplayer-choice-group]';
     const BUTTON_SELECTOR = '[data-potplayer-choice]';
     const DESTINATION_ATTRIBUTE = 'data-potplayer-destination';
-    const ORIGINAL_ATTRIBUTE = 'data-potplayer-choice-original';
-    const ORIGINAL_SELECTOR = `[${ORIGINAL_ATTRIBUTE}]`;
     const CONTROL_SELECTOR = [
         '.detailButtons button', '.detailButtons a', '.detailButtons [role="button"]',
         '.mainDetailButtons button', '.mainDetailButtons a',
@@ -48,18 +46,8 @@
             button.setAttribute('aria-label', label);
         }
 
-        function restoreOriginal(entry) {
-            const target = entry.target;
-            if (!target.isConnected) return;
-            target.hidden = entry.originalHidden;
-            if (entry.originalAriaHidden === null) target.removeAttribute('aria-hidden');
-            else target.setAttribute('aria-hidden', entry.originalAriaHidden);
-            target.removeAttribute(ORIGINAL_ATTRIBUTE);
-        }
-
         function removeGroup(target, entry) {
             entry.group.remove();
-            restoreOriginal(entry);
             groups.delete(target);
         }
 
@@ -73,7 +61,7 @@
                     !target.matches(BUTTON_SELECTOR)
                     && !target.closest(GROUP_SELECTOR)
                     && getMode(target)
-                    && (target.matches(ORIGINAL_SELECTOR) || isVisible(target))
+                    && isVisible(target)
                 ))
                 : [];
             const active = new Set(controls);
@@ -98,8 +86,6 @@
                         group,
                         webButton,
                         potPlayerButton,
-                        originalHidden: target.hidden,
-                        originalAriaHidden: target.getAttribute('aria-hidden'),
                     };
                     groups.set(target, entry);
                     originals.set(webButton, target);
@@ -109,9 +95,6 @@
                 const mode = getMode(target);
                 updateButton(entry.webButton, 'web', mode);
                 updateButton(entry.potPlayerButton, 'potplayer', mode);
-                target.hidden = true;
-                target.setAttribute('aria-hidden', 'true');
-                target.setAttribute(ORIGINAL_ATTRIBUTE, '');
                 if (target.nextElementSibling !== entry.group) target.after(entry.group);
             }
         }

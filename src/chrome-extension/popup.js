@@ -68,6 +68,7 @@ function renderOrigins() {
 }
 
 function fillForm(values) {
+    $('enabled').checked = values.defaultPlayer === 'potplayer';
     $('maxPlaylistItems').value = values.maxPlaylistItems;
     $('mediaSourceConcurrency').value = values.mediaSourceConcurrency;
     $('requestTimeoutSeconds').value = values.requestTimeoutSeconds;
@@ -81,6 +82,8 @@ function fillForm(values) {
 
 function readForm() {
     return settingsApi.normalize({
+        defaultPlayer: $('enabled').checked ? 'potplayer' : 'web',
+        enabled: $('enabled').checked,
         maxPlaylistItems: $('maxPlaylistItems').value,
         mediaSourceConcurrency: $('mediaSourceConcurrency').value,
         requestTimeoutSeconds: $('requestTimeoutSeconds').value,
@@ -131,6 +134,14 @@ async function saveSettings() {
 }
 
 $('version').textContent = `v${chrome.runtime.getManifest().version}`;
+$('enabled').addEventListener('change', () => {
+    const enabled = $('enabled').checked;
+    const defaultPlayer = enabled ? 'potplayer' : 'web';
+    chrome.storage.local.set({ enabled, defaultPlayer }, () => {
+        const error = chrome.runtime.lastError;
+        setStatus(error ? '启用状态保存失败' : (enabled ? '默认使用 PotPlayer' : '默认使用网页；仍可临时选择 PotPlayer'), Boolean(error));
+    });
+});
 $('add-origin').addEventListener('click', () => {
     const value = settingsApi.normalizeOrigin($('new-origin').value);
     if (!value) {

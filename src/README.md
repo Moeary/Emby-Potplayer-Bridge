@@ -15,7 +15,7 @@ src/
 │  ├─ settings.js           默认设置与配置归一化
 │  ├─ page-bridge.js        页面主世界 API 与媒体请求协调
 │  ├─ content-script.js     播放按钮拦截、配置读取和消息转发
-│  ├─ playback-choice.js/css 固定双按钮和动态页面维护
+│  ├─ playback-choice.js/css 默认入口旁的辅助双按钮和动态页面维护
 │  ├─ service-worker.js     Native Messaging、动态权限和后台校验
 │  └─ popup.html/js         工具栏设置界面
 └─ python-host/             Python Chrome Native Messaging Host
@@ -47,7 +47,7 @@ Emby/Jellyfin 页面
 
 content-script.js 只负责识别用户的播放动作和阻止网页默认行为；page-bridge.js 负责调用页面已有的 API。播放服务的差异集中在 adapters/：共享核心处理剧集、播放列表、令牌和排序，Emby/Jellyfin 适配器分别提供服务识别与流地址前缀。
 
-详情页和列表播放控件都会显示固定的连体双按钮：左侧 `在网页中播放` 同步点击原始站点控件，右侧 `在PotPlayer中播放` 才进入解析和 Native Messaging。两种入口不读取、不保存默认播放器状态；后台仍验证发送页面的来源是否获准。网页入口只放行当前点击；新的播放请求或页面跳转会取消尚未完成的旧解析请求。
+详情页和列表播放控件会保留原始播放按钮，并在右侧显示固定的连体双按钮：原始按钮遵循 `defaultPlayer`（兼容旧版 `enabled`）决定默认走网页或 PotPlayer；辅助组左侧 `在网页中播放` 仅本次放行原始站点控件，右侧 `在PotPlayer中播放` 仅本次进入解析和 Native Messaging，辅助按钮不会修改默认设置。后台仍验证发送页面的来源是否获准；新的播放请求或页面跳转会取消尚未完成的旧解析请求。
 
 系列详情页点击“播放”时，解析顺序为：
 

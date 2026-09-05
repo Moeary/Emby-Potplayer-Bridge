@@ -38,6 +38,8 @@
     function normalizeSettings(raw) {
         if (settingsApi && typeof settingsApi.normalize === 'function') return settingsApi.normalize(raw);
         return {
+            defaultPlayer: 'potplayer',
+            enabled: true,
             requestTimeoutSeconds: 120,
             fallbackToBrowser: true,
             allowedOrigins: [location.origin],
@@ -51,7 +53,10 @@
         const apply = (raw) => {
             if (generation !== settingsLoadGeneration) return;
             const nextSettings = normalizeSettings(raw);
-            if (settings && settings.allowedOrigins.join() !== nextSettings.allowedOrigins.join()) {
+            if (settings && (
+                settings.defaultPlayer !== nextSettings.defaultPlayer
+                || settings.allowedOrigins.join() !== nextSettings.allowedOrigins.join()
+            )) {
                 cancelPendingPlayback();
             }
             settings = nextSettings;
@@ -382,18 +387,22 @@
         if (!isAllowedSite()) return;
 
         const choice = choiceUi?.getSelection(target);
-        if (!choice) return;
-        const original = choice.target;
+        const original = choice ? choice.target : target;
         const mode = getPlaybackMode(original);
         if (!mode) return;
 
-        if (choice.destination === 'web') {
+        if (choice?.destination === 'web') {
             event.preventDefault();
             event.stopImmediatePropagation();
             playInBrowser(original);
             return;
         }
-        if (choice.destination !== 'potplayer') return;
+        const usePotPlayer = choice?.destination === 'potplayer'
+            || (!choice && settings?.defaultPlayer === 'potplayer');
+        if (!usePotPlayer) {
+            cancelPendingPlayback();
+            return;
+        }
         const context = findContext(original);
         if (mode !== 'single' && !context.parentId && !context.itemId) return;
         if (mode === 'single' && !context.itemId) return;
