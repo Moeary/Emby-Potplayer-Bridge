@@ -1,11 +1,12 @@
-/* 两个固定入口连成一组；不依赖站点的 .btnPlay / .detailButton 样式或事件。 */
+/* 两个小型图标辅助入口连成一组；不依赖站点的 .btnPlay / .detailButton 样式或事件。 */
 .potplayer-choice-group {
     box-sizing: border-box;
+    position: relative;
     display: inline-flex;
     align-items: stretch;
     max-width: 100%;
     margin: 0 .6em .6em 0;
-    overflow: hidden;
+    overflow: visible;
     border: 1px solid rgba(150, 150, 150, .4);
     border-radius: 999px;
     background: rgba(128, 128, 128, .16);
@@ -14,23 +15,23 @@
 }
 
 button.potplayer-choice-button {
+    position: relative;
     box-sizing: border-box;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    flex: 1 1 auto;
-    min-width: 0;
-    min-height: 2.6em;
-    max-width: 100%;
+    flex: 0 0 2.8em;
+    width: 2.8em;
+    min-width: 2.8em;
+    height: 2.8em;
     margin: 0;
-    padding: .7em 1.1em;
+    padding: .55em;
     border: 0;
     border-radius: 0;
     background: transparent;
     color: inherit;
     font: inherit;
-    font-weight: 600;
-    line-height: 1.25;
+    line-height: 1;
     text-align: center;
     text-decoration: none;
     cursor: pointer;
@@ -38,16 +39,30 @@ button.potplayer-choice-button {
     transition: background-color .15s, color .15s;
 }
 
+button.potplayer-choice-button:first-child { border-radius: 999px 0 0 999px; }
+button.potplayer-choice-button:last-child { border-radius: 0 999px 999px 0; }
+button.potplayer-choice-button[data-provider="emby"] { color: #f0a13a; }
+button.potplayer-choice-button[data-provider="jellyfin"] { color: #76b8ff; }
+button.potplayer-choice-button[data-provider="potplayer"] { color: #f3ca55; }
+
+.potplayer-choice-icon {
+    display: block;
+    width: 1.35em;
+    height: 1.35em;
+    max-width: 100%;
+    pointer-events: none;
+}
+
 button.potplayer-choice-button + button.potplayer-choice-button {
     border-left: 1px solid rgba(150, 150, 150, .4);
 }
 
-button.potplayer-choice-button:hover {
+button.potplayer-choice-button:hover,
+button.potplayer-choice-button:focus-visible {
     background: rgba(128, 128, 128, .32);
 }
 
 button.potplayer-choice-button:focus-visible {
-    position: relative;
     z-index: 1;
     outline: 2px solid currentColor;
     outline-offset: -3px;
@@ -57,9 +72,39 @@ button.potplayer-choice-button:active {
     background: rgba(128, 128, 128, .44);
 }
 
+button.potplayer-choice-button::after {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 8px);
+    z-index: 10;
+    max-width: 240px;
+    padding: .45em .7em;
+    border: 1px solid rgba(255, 255, 255, .12);
+    border-radius: .45em;
+    background: #202329;
+    box-shadow: 0 5px 18px rgba(0, 0, 0, .35);
+    color: #f2f4f8;
+    content: attr(data-tooltip);
+    font: 12px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-weight: 500;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(4px);
+    transition: opacity .12s ease, transform .12s ease;
+    visibility: hidden;
+    white-space: nowrap;
+}
+
+button.potplayer-choice-button:hover::after,
+button.potplayer-choice-button:focus-visible::after {
+    opacity: 1;
+    transform: translateY(0);
+    visibility: visible;
+}
+
 @media (max-width: 520px) {
-    button.potplayer-choice-button {
-        padding-right: .8em;
-        padding-left: .8em;
+    button.potplayer-choice-button::after {
+        right: auto;
+        left: 0;
     }
 }

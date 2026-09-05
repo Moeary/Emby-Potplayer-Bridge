@@ -9,7 +9,7 @@
 - adapters/jellyfin.js：Jellyfin 服务识别与 /Videos 流地址适配。
 - page-bridge.js：在页面主世界调用 Emby/Jellyfin 已有的 API。
 - content-script.js：读取默认播放器设置，处理原始播放按钮和辅助按钮的网页/PotPlayer 分流。
-- playback-choice.js / playback-choice.css：在原始播放按钮旁生成网页/PotPlayer 连体辅助入口，监听 SPA 页面变化。
+- playback-choice.js / playback-choice.css：在原始播放按钮旁生成 Emby/Jellyfin 与 PotPlayer 图标连体辅助入口，并提供悬停提示，监听 SPA 页面变化。
 - service-worker.js：Native Messaging 和动态站点脚本注册。
 
 可用 `node --test tests/extension/*.test.cjs` 运行后台回归测试；浏览器交互回归页位于仓库根目录 `tests/extension/fixture.html`（经本地 HTTP 服务打开）。

@@ -33,6 +33,7 @@
     const choiceUi = globalThis.PotPlayerPlaybackChoice?.create({
         getSettings: () => settings,
         getMode: (target) => getPlaybackMode(target),
+        getProvider: () => getSiteProvider(),
     });
 
     function normalizeSettings(raw) {

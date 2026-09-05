@@ -116,8 +116,13 @@
                 assert(group.querySelectorAll('[data-potplayer-choice]').length === 2, '按钮数量错误');
                 assert(!original.hidden && original.getAttribute('aria-hidden') !== 'true', '原始按钮被隐藏');
                 assert(!original.hasAttribute('data-potplayer-choice-original'), '原始按钮被标记为辅助按钮');
-                assert(buttonFor(original, 'web').textContent === '在网页中播放', '左侧按钮文本错误');
-                assert(buttonFor(original, 'potplayer').textContent === '在PotPlayer中播放', '右侧按钮文本错误');
+                assert(buttonFor(original, 'web').querySelector('svg'), '左侧网页按钮缺少图标');
+                assert(buttonFor(original, 'potplayer').querySelector('svg'), '右侧 PotPlayer 按钮缺少图标');
+                assert(buttonFor(original, 'web').getAttribute('data-tooltip') === '在网页中播放', '左侧按钮提示错误');
+                assert(buttonFor(original, 'potplayer').getAttribute('data-tooltip') === '在PotPlayer中播放', '右侧按钮提示错误');
+                assert(buttonFor(original, 'web').getAttribute('aria-label') === '在网页中播放', '左侧按钮无障碍标签错误');
+                assert(buttonFor(original, 'potplayer').getAttribute('aria-label') === '在PotPlayer中播放', '右侧按钮无障碍标签错误');
+                assert(buttonFor(original, 'web').clientWidth < 80 && buttonFor(original, 'potplayer').clientWidth < 80, '图标按钮没有收窄');
                 assert(original.nextElementSibling === group, '辅助按钮没有紧邻原始按钮');
             });
             await check('默认 PotPlayer 时原始播放按钮发送 EP4', async () => {
