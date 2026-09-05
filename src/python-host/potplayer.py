@@ -91,15 +91,31 @@ def resolve_player_path(
     return local_player
 
 
+def format_seek_time(start_position_ticks: int | float) -> str:
+    """Convert Emby/Jellyfin ticks to PotPlayer's hh:mm:ss.ms seek value."""
+
+    try:
+        milliseconds = max(0, int(round(float(start_position_ticks) / 10_000)))
+    except (TypeError, ValueError, OverflowError):
+        milliseconds = 0
+    hours, remainder = divmod(milliseconds, 60 * 60 * 1000)
+    minutes, remainder = divmod(remainder, 60 * 1000)
+    seconds, milliseconds = divmod(remainder, 1000)
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d}.{milliseconds:03d}"
+
+
 def start_potplayer(
     playlist_path: str | os.PathLike[str],
     player_path: str | os.PathLike[str],
     *,
     process_launcher: Callable[[Sequence[str]], object] | None = None,
+    start_position_ticks: int | float = 0,
 ) -> object:
-    """Launch PotPlayer with the exact ``/current <playlist>`` arguments."""
+    """Launch PotPlayer with /current <playlist> and optional resume seek."""
 
     command = [str(player_path), "/current", str(playlist_path)]
+    if float(start_position_ticks) > 0:
+        command.append("/seek=" + format_seek_time(start_position_ticks))
     if process_launcher is not None:
         return process_launcher(command)
 

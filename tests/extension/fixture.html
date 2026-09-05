@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>播放方式切换 · 扩展回归测试</title>
+<link rel="stylesheet" href="../../src/chrome-extension/playback-choice.css">
+<style>
+    :root { color-scheme: dark; font: 16px/1.55 system-ui, sans-serif; background: #1e1e1e; color: #eee; }
+    body { max-width: 1000px; margin: 40px auto; padding: 0 24px; }
+    h1 { font-size: 30px; margin-bottom: 8px; }
+    p { color: #bbb; }
+    .stage { border: 1px solid #444; padding: 24px; border-radius: 16px; margin: 24px 0; max-width: 100%; box-sizing: border-box; }
+    .detailButtons, .itemsViewSettingsContainer { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 0; }
+    .btnResume, .btnPlay, .btnShuffle { font: inherit; font-weight: 600; color: inherit; border: 0; border-radius: 999px; background: #404040; padding: 14px 24px; margin: 0 .6em .6em 0; cursor: pointer; }
+    .btnResume { min-width: 120px; }
+    .btnResume .icon { margin-right: 10px; }
+    .detailButton-highres { display: none; }
+    .tools { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+    .tools button, select { padding: 10px 14px; font: inherit; border-radius: 8px; border: 1px solid #666; cursor: pointer; }
+    output { white-space: pre-wrap; overflow-wrap: anywhere; display: block; padding: 12px; background: #171717; border-radius: 8px; margin: 12px 0; }
+    .pass { color: #9dd6a8; } .fail { color: #ff8c8c; }
+</style>
+<script src="fixture.js"></script>
+<script defer src="../../src/chrome-extension/settings.js"></script>
+<script defer src="../../src/chrome-extension/playback-choice.js"></script>
+<script defer src="../../src/chrome-extension/content-script.js"></script>
+</head>
+<body>
+<h1>选择本次播放方式</h1>
+<p>使用实际扩展代码与模拟 Emby 控件；所有媒体解析、网页播放和 Native Host 调用均为本地测试，不连接真实媒体服务。</p>
+<div class="tools">
+    <label>默认方式 <select id="default-player"><option value="potplayer">PotPlayer</option><option value="web">网页</option></select></label>
+    <button id="run-tests" type="button">运行交互回归测试</button>
+</div>
+<section class="stage" id="stage">
+    <h2>示例番剧 · EP4</h2>
+    <div class="detailButtons mainDetailButtons" id="detail-controls">
+        <button type="button" class="btnResume raised detailButton" data-mode="resume" title="播放" aria-label="播放"><span class="icon">▶</span><span class="detailButton-lowres">播放</span><span class="detailButton-highres">播放</span></button>
+        <button type="button" class="favorite" aria-label="收藏">♡</button>
+    </div>
+    <p>原按钮遵循默认；右侧按钮仅对本次生效。</p>
+</section>
+<div class="itemsViewSettingsContainer">
+    <button type="button" class="btnPlay">播放全部</button>
+    <button type="button" class="btnShuffle">随机播放</button>
+</div>
+<output id="activity" aria-live="polite">等待操作</output>
+<output id="test-results" aria-live="polite">尚未运行</output>
+</body>
+</html>

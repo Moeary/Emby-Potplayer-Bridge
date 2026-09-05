@@ -103,10 +103,10 @@
 
   <section class="section">
     <label class="switch-row">
-      <span>使用 PotPlayer 外部播放</span>
+      <span>默认使用 PotPlayer 播放</span>
       <input id="enabled" type="checkbox">
     </label>
-    <p class="hint">关闭后立即保留网页原本的播放行为，无需再次点击保存。</p>
+    <p class="hint">关闭后默认使用网页。详情页播放按钮右侧可临时选择另一种方式，不改变此设置；开关立即生效。</p>
   </section>
 
   <section class="section">
@@ -125,7 +125,9 @@
     </div>
     <label class="check-row"><input id="skipUnavailable" type="checkbox">没有媒体源的项目跳过</label>
     <label class="check-row"><input id="fallbackToBrowser" type="checkbox">桥接失败时回退网页播放</label>
-    <p class="hint">当前默认值：1024 项、6 路并发、120 秒超时。</p>
+    <label class="check-row"><input id="resumePlayback" type="checkbox">按 Emby/Jellyfin 记录从上次位置播放</label>
+    <label class="check-row"><input id="syncPlayback" type="checkbox">将 PotPlayer 播放进度同步回服务器</label>
+    <p class="hint">当前默认值：1024 项、6 路并发、120 秒超时。同步使用当前网页登录会话，不需要额外 API key。</p>
   </section>
 
   <section class="section">

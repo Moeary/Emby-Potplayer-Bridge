@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from datetime import datetime
 import json
+import threading
 import os
 from pathlib import Path
 import re
@@ -15,10 +16,12 @@ from typing import Any, BinaryIO, Callable, Sequence
 from native_messaging import NativeMessagingError, read_message, write_json_message
 from playlist import (
     MAX_PLAYLIST_ITEMS,
+    PlaylistEntry,
     cleanup_old_playlists,
     validate_entries,
     write_playlist,
 )
+from playback_monitor import monitor_playback
 from potplayer import resolve_player_path, start_potplayer
 
 
@@ -74,6 +77,7 @@ def handle_request(
     temp_dir: str | os.PathLike[str] | None = None,
     environment: Mapping[str, str] | None = None,
     process_launcher: Callable[[Sequence[str]], object] | None = None,
+    on_playback_started: Callable[[list[PlaylistEntry], Path], object] | None = None,
 ) -> dict[str, Any]:
     """Handle one already-decoded request and return the wire response."""
 
@@ -98,8 +102,19 @@ def handle_request(
 
     cleanup_old_playlists(temp_dir)
     playlist_path = write_playlist(entries, temp_dir)
-    start_potplayer(playlist_path, player_path, process_launcher=process_launcher)
-    return {"ok": True, "count": len(entries), "error": None}
+    start_potplayer(
+        playlist_path,
+        player_path,
+        process_launcher=process_launcher,
+        start_position_ticks=entries[0].start_position_ticks if entries else 0,
+    )
+    if on_playback_started is not None:
+        on_playback_started(entries, player_path)
+    response: dict[str, Any] = {"ok": True, "count": len(entries), "error": None}
+    session_id = _value(request, "sessionId")
+    if isinstance(session_id, str) and session_id.strip():
+        response["sessionId"] = session_id.strip()
+    return response
 
 
 def run(
@@ -111,15 +126,56 @@ def run(
     environment: Mapping[str, str] | None = None,
     process_launcher: Callable[[Sequence[str]], object] | None = None,
 ) -> int:
-    """Run the framing loop. stdout receives only framed JSON responses."""
+    """Run the framing loop. stdout receives framed responses and progress events."""
+
+    output_lock = threading.Lock()
+    monitor_stop: threading.Event | None = None
+    pending_monitor: tuple[Any, list[PlaylistEntry], Path] | None = None
+
+    def emit_playback_event(payload: dict[str, Any]) -> None:
+        try:
+            with output_lock:
+                write_json_message(output_stream, payload)
+        except (BrokenPipeError, OSError, NativeMessagingError) as error:
+            write_error(error, temp_dir)
+            if monitor_stop is not None:
+                monitor_stop.set()
+
+    def prepare_monitor(request: Any, entries: list[PlaylistEntry], player_path: Path) -> None:
+        nonlocal pending_monitor
+        pending_monitor = (request, entries, player_path)
+
+    def launch_monitor(request: Any, entries: list[PlaylistEntry], _player_path: Path) -> None:
+        nonlocal monitor_stop
+        if _value(request, "syncPlayback") is not True:
+            return
+        session_id = _value(request, "sessionId")
+        if not isinstance(session_id, str) or not session_id.strip():
+            return
+        if monitor_stop is not None:
+            monitor_stop.set()
+        monitor_stop = threading.Event()
+        stop_event = monitor_stop
+
+        def worker() -> None:
+            try:
+                monitor_playback(session_id, entries, emit_playback_event, stop_event=stop_event)
+            except Exception as error:
+                write_error(error, temp_dir)
+
+        threading.Thread(target=worker, name="potplayer-playback-monitor", daemon=True).start()
 
     while True:
         try:
             raw = read_message(input_stream)
         except NativeMessagingError as error:
+            if monitor_stop is not None:
+                monitor_stop.set()
             write_error(error, temp_dir)
             return 1
         if raw is None:
+            if monitor_stop is not None:
+                monitor_stop.set()
             return 0
 
         try:
@@ -128,18 +184,26 @@ def run(
                 request,
                 app_dir=app_dir,
                 temp_dir=temp_dir,
-                environment=environment,
                 process_launcher=process_launcher,
+                on_playback_started=lambda entries, player_path: prepare_monitor(request, entries, player_path),
             )
-        except Exception as error:  # One bad request must produce a protocol response.
+        except Exception as error:
             write_error(error, temp_dir)
             response = {"ok": False, "count": 0, "error": sanitize_error_message(str(error))}
 
         try:
-            write_json_message(output_stream, response)
+            with output_lock:
+                write_json_message(output_stream, response)
         except (BrokenPipeError, OSError, NativeMessagingError) as error:
+            if monitor_stop is not None:
+                monitor_stop.set()
             write_error(error, temp_dir)
             return 1
+
+        if pending_monitor is not None:
+            monitor_request, monitor_entries, monitor_player_path = pending_monitor
+            pending_monitor = None
+            launch_monitor(monitor_request, monitor_entries, monitor_player_path)
 
 
 def main() -> int:

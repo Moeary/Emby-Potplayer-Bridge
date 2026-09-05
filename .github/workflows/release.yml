@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag to build, for example v0.5.1"
+        description: "Release tag to build, for example v0.7.1"
         required: true
-        default: "v0.5.1"
+        default: "v0.7.1"
         type: string
 
 permissions:

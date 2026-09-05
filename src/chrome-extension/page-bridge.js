@@ -6,6 +6,7 @@
     const RESPONSE_TYPE = 'codex-potplayer-response';
     const page = window;
     const settingsApi = page.PotPlayerSettings;
+    const adapterCore = page.PotPlayerMediaAdapterCore;
 
     const sleep = (ms) => new Promise((resolve) => page.setTimeout(resolve, ms));
 
@@ -18,22 +19,192 @@
             mediaSourceConcurrency: 6,
             requestTimeoutSeconds: 120,
             skipUnavailable: true,
+            resumePlayback: true,
+            syncPlayback: true,
         };
     }
 
-    function getHashParams() {
-        const hash = String(page.location.hash || '');
-        const index = hash.indexOf('?');
-        return index >= 0 ? new URLSearchParams(hash.slice(index + 1)) : new URLSearchParams();
+    const PLAYBACK_EVENT_TYPE = 'codex-potplayer-playback-event';
+    const resolvedRequests = new Map();
+    const activePlaybackSessions = new Map();
+    const PLAYBACK_REPORT_METHODS = Object.freeze({
+        started: 'reportPlaybackStart',
+        progress: 'reportPlaybackProgress',
+        stopped: 'reportPlaybackStopped',
+    });
+
+    function finitePlaybackTicks(value) {
+        const number = Number(value);
+        return Number.isFinite(number) && number >= 0 ? Math.floor(number) : 0;
+    }
+
+    function rememberResolvedRequest(requestId, state) {
+        const key = String(requestId || '');
+        if (!key) return;
+        resolvedRequests.set(key, state);
+        page.setTimeout(() => {
+            if (resolvedRequests.get(key) === state) resolvedRequests.delete(key);
+        }, 10 * 60 * 1000);
+    }
+
+    function findPlaybackEntry(session, eventData) {
+        const itemId = String(eventData && eventData.itemId || '');
+        if (itemId) {
+            const byId = session.items.find((entry) => String(entry.itemId || '') === itemId);
+            if (byId) return byId;
+        }
+        const index = Number(eventData && eventData.playlistIndex);
+        if (Number.isInteger(index) && index >= 0 && index < session.items.length) {
+            session.currentIndex = index;
+            return session.items[index];
+        }
+        return session.items[session.currentIndex] || session.items[0];
+    }
+
+    function playbackInfo(session, kind, entry, eventData) {
+        const eventTicks = finitePlaybackTicks(eventData && eventData.positionTicks);
+        const positionTicks = eventData && Number.isFinite(Number(eventData.positionTicks))
+            ? eventTicks
+            : finitePlaybackTicks(session.lastPositionTicks || entry.startPositionTicks);
+        const eventRuntime = finitePlaybackTicks(eventData && eventData.runtimeTicks);
+        const runtimeTicks = eventData && Number.isFinite(Number(eventData.runtimeTicks))
+            ? eventRuntime
+            : finitePlaybackTicks(session.lastRuntimeTicks || entry.runtimeTicks);
+        const info = {
+            ItemId: String(entry.itemId || ''),
+            PositionTicks: positionTicks,
+            RunTimeTicks: runtimeTicks,
+            PlaySessionId: session.sessionId,
+            CanSeek: true,
+            IsPaused: false,
+            IsMuted: false,
+            PlayMethod: 'DirectPlay',
+            QueueableMediaTypes: ['Video'],
+            PlaylistIndex: session.currentIndex,
+            PlaylistLength: session.items.length,
+            EventName: kind === 'progress'
+                ? 'TimeUpdate'
+                : kind === 'started' ? 'PlaybackStart' : 'PlaybackStop',
+        };
+        if (entry.mediaSourceId) info.MediaSourceId = String(entry.mediaSourceId);
+        return info;
+    }
+
+    async function reportWithFetch(session, endpointName, info) {
+        const token = adapterCore.getAccessToken(session.api);
+        if (!token) throw new Error('页面登录会话已失效，无法同步播放进度');
+        const relativePath = String(session.adapter.serverPath || '') + '/Sessions/' + endpointName;
+        const endpoint = adapterCore.makeApiUrl(session.api, relativePath, session.adapter);
+        endpoint.searchParams.set('api_key', token);
+        const response = await page.fetch(endpoint.href, {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Emby-Token': token,
+                'X-MediaBrowser-Token': token,
+            },
+            body: JSON.stringify(info),
+        });
+        if (!response.ok) throw new Error('播放进度同步失败（HTTP ' + response.status + '）');
+    }
+
+    async function reportPlayback(session, kind, entry, eventData) {
+        const info = playbackInfo(session, kind, entry, eventData);
+        const methodName = PLAYBACK_REPORT_METHODS[kind];
+        const method = methodName && session.api && session.api[methodName];
+        if (typeof method === 'function') {
+            try {
+                await method.call(session.api, info);
+                return;
+            } catch (error) {
+                console.warn('[PotPlayer Bridge] 页面 API 回报失败，尝试兼容接口', error && error.message || error);
+            }
+        }
+        await reportWithFetch(
+            session,
+            kind === 'started' ? 'Playing' : kind === 'progress' ? 'Playing/Progress' : 'Playing/Stopped',
+            info,
+        );
+    }
+
+    function queuePlaybackReport(session, kind, entry, eventData) {
+        if (!entry || !entry.itemId) return;
+        const reportData = { ...(eventData || {}) };
+        if (!Number.isFinite(Number(reportData.positionTicks))) {
+            reportData.positionTicks = finitePlaybackTicks(session.lastPositionTicks || entry.startPositionTicks);
+        }
+        if (!Number.isFinite(Number(reportData.runtimeTicks))) {
+            reportData.runtimeTicks = finitePlaybackTicks(session.lastRuntimeTicks || entry.runtimeTicks);
+        }
+        session.reportQueue = session.reportQueue
+            .then(() => reportPlayback(session, kind, entry, reportData))
+            .catch((error) => console.warn('[PotPlayer Bridge] 播放进度同步失败', error && error.message || error));
+    }
+
+    function startPlaybackSession(eventData) {
+        const requestId = String(eventData && eventData.requestId || '');
+        const stored = resolvedRequests.get(requestId);
+        const sessionId = String(eventData && eventData.sessionId || '');
+        if (!stored || !sessionId || stored.settings.syncPlayback === false) return;
+        const session = {
+            ...stored,
+            sessionId,
+            currentIndex: 0,
+            lastPositionTicks: stored.items[0] && stored.items[0].startPositionTicks || 0,
+            lastRuntimeTicks: stored.items[0] && stored.items[0].runtimeTicks || 0,
+            reportQueue: Promise.resolve(),
+        };
+        activePlaybackSessions.set(sessionId, session);
+        queuePlaybackReport(session, 'started', session.items[0], eventData);
+    }
+
+    function updatePlaybackSession(eventData) {
+        const sessionId = String(eventData && eventData.sessionId || '');
+        const session = activePlaybackSessions.get(sessionId);
+        if (!session) return;
+        const entry = findPlaybackEntry(session, eventData);
+        if (!entry) return;
+        if (Number.isFinite(Number(eventData.positionTicks))) {
+            session.lastPositionTicks = finitePlaybackTicks(eventData.positionTicks);
+        }
+        if (Number.isFinite(Number(eventData.runtimeTicks))) {
+            session.lastRuntimeTicks = finitePlaybackTicks(eventData.runtimeTicks);
+        }
+        queuePlaybackReport(session, 'progress', entry, eventData);
+    }
+
+    function stopPlaybackSession(eventData) {
+        const sessionId = String(eventData && eventData.sessionId || '');
+        const session = activePlaybackSessions.get(sessionId);
+        if (!session) return;
+        const entry = findPlaybackEntry(session, eventData);
+        if (entry) queuePlaybackReport(session, 'stopped', entry, eventData);
+        activePlaybackSessions.delete(sessionId);
     }
 
     function getApiClient(serverId) {
         try {
-            if (page.ApiClient) return page.ApiClient;
-            if (page.apiClient) return page.apiClient;
-            const manager = page.ConnectionManager || page.connectionManager;
-            if (manager && typeof manager.getApiClient === 'function') {
-                return manager.getApiClient(serverId || undefined) || manager.getApiClient();
+            const candidates = [page.ApiClient, page.apiClient];
+            for (const candidate of candidates) {
+                if (candidate && (typeof candidate.getItem === 'function'
+                    || typeof candidate.getItems === 'function'
+                    || typeof candidate.getPlaybackInfo === 'function')) return candidate;
+            }
+
+            const managers = [page.ConnectionManager, page.connectionManager];
+            for (const manager of managers) {
+                if (!manager || typeof manager.getApiClient !== 'function') continue;
+                let candidate = null;
+                try {
+                    if (serverId) candidate = manager.getApiClient(serverId);
+                } catch (_) {
+                    // 某些客户端只接受无参数调用。
+                }
+                if (!candidate) {
+                    try { candidate = manager.getApiClient(); } catch (_) { /* 继续等待 */ }
+                }
+                if (candidate) return candidate;
             }
         } catch (_) {
             // 页面应用可能尚未完成初始化。
@@ -45,7 +216,9 @@
         const deadline = Date.now() + timeoutMs;
         while (Date.now() < deadline) {
             const api = getApiClient(serverId);
-            if (api && (typeof api.getItem === 'function' || typeof api.getItems === 'function' || typeof api.getPlaybackInfo === 'function')) return api;
+            if (api && (typeof api.getItem === 'function'
+                || typeof api.getItems === 'function'
+                || typeof api.getPlaybackInfo === 'function')) return api;
             await sleep(100);
         }
         return null;
@@ -61,146 +234,7 @@
         return '';
     }
 
-    function getServerAddress(api) {
-        try {
-            let address = api._serverAddress || api.serverAddress || api.baseUrl;
-            if (typeof address === 'function') address = address.call(api);
-            if (address) return String(address).replace(/\/$/, '');
-        } catch (_) {
-            // 使用页面来源作为回退。
-        }
-        return String(page.location.origin).replace(/\/$/, '');
-    }
-
-    function getAccessToken(api) {
-        try {
-            if (typeof api.accessToken === 'function') return api.accessToken() || '';
-            if (api._serverInfo && api._serverInfo.AccessToken) return api._serverInfo.AccessToken;
-        } catch (_) {
-            // 不将令牌写入页面日志。
-        }
-        return '';
-    }
-
-    async function getItem(api, userId, itemId) {
-        if (typeof api.getItem !== 'function') throw new Error('当前页面 API 不支持读取媒体信息');
-        return await api.getItem(userId, itemId);
-    }
-
-    async function getMediaSources(api, userId, item) {
-        if (Array.isArray(item.MediaSources) && item.MediaSources.length) return item.MediaSources;
-        if (typeof api.getPlaybackInfo === 'function') {
-            const result = await api.getPlaybackInfo(item.Id, {
-                UserId: userId,
-                StartTimeTicks: item.UserData && item.UserData.PlaybackPositionTicks || 0,
-                IsPlayback: true,
-                AutoOpenLiveStream: true,
-                EnableDirectPlay: true,
-                EnableDirectStream: true,
-                EnableTranscoding: true,
-            });
-            if (result && Array.isArray(result.MediaSources)) return result.MediaSources;
-        }
-        return [];
-    }
-
-    async function getAllItems(api, userId, options, maxItems) {
-        if (typeof api.getItems !== 'function') throw new Error('当前页面 API 不支持读取播放列表');
-        const all = [];
-        const pageSize = 500;
-        let startIndex = 0;
-        let total = Number.POSITIVE_INFINITY;
-        // 多取 1 项，用于识别“超过上限”，同时避免无界分页请求。
-        while (all.length < maxItems + 1) {
-            const limit = Math.min(pageSize, maxItems + 1 - all.length);
-            const result = await api.getItems(userId, { ...options, StartIndex: startIndex, Limit: limit });
-            const items = result && Array.isArray(result.Items) ? result.Items : [];
-            if (!items.length) break;
-            all.push(...items);
-            startIndex += items.length;
-            const reportedTotal = Number(result.TotalRecordCount);
-            if (Number.isFinite(reportedTotal)) total = reportedTotal;
-            if (items.length < pageSize || startIndex >= total) break;
-        }
-        return all;
-    }
-
-    function isVideoItem(item) {
-        return Boolean(item && ['Movie', 'Episode', 'Video', 'MusicVideo', 'Trailer', 'HomeVideo', 'AdultVideo', 'Program', 'ChannelVideo'].includes(item.Type));
-    }
-
-    async function getPlaylistItems(api, userId, context, settings) {
-        let parentId = context.parentId;
-        if (!parentId && context.itemId) {
-            const current = await getItem(api, userId, context.itemId);
-            parentId = current && (current.ParentId || current.SeriesId || '');
-        }
-        if (!parentId) throw new Error('未找到当前目录');
-
-        const common = {
-            ParentId: parentId,
-            Recursive: false,
-            SortBy: 'SortName',
-            SortOrder: 'Ascending',
-            Fields: 'MediaSources,MediaStreams,Path,Overview,UserData',
-        };
-        const includeItemTypes = 'Movie,Episode,Video,MusicVideo,Trailer,HomeVideo,AdultVideo,Program,ChannelVideo';
-        let items = await getAllItems(api, userId, { ...common, IncludeItemTypes: includeItemTypes }, settings.maxPlaylistItems);
-        if (!items.length) items = await getAllItems(api, userId, common, settings.maxPlaylistItems);
-        items = items.filter(isVideoItem);
-        if (!items.length) throw new Error('当前目录没有可播放的视频');
-        if (items.length > settings.maxPlaylistItems) {
-            throw new Error(`当前目录有 ${items.length} 项，超过当前上限 ${settings.maxPlaylistItems} 项`);
-        }
-        return items;
-    }
-
-    function shuffle(items) {
-        const result = items.slice();
-        for (let i = result.length - 1; i > 0; i -= 1) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [result[i], result[j]] = [result[j], result[i]];
-        }
-        return result;
-    }
-
-    function streamExtension(source, item) {
-        const raw = source && (source.Container || source.Format);
-        if (raw) return String(raw).replace(/[^a-z0-9]/gi, '').toLowerCase() || 'mp4';
-        const path = source && source.Path || item && item.Path || '';
-        const match = /\.([a-z0-9]{2,5})(?:$|[?#])/i.exec(path);
-        return match ? match[1].toLowerCase() : 'mp4';
-    }
-
-    function addAccessToken(url, token, base) {
-        const parsed = new URL(url, base);
-        if (token && !parsed.searchParams.has('api_key')) parsed.searchParams.set('api_key', token);
-        return parsed.href;
-    }
-
-    function buildStreamUrl(api, item, source) {
-        const base = getServerAddress(api);
-        const token = getAccessToken(api);
-        const mediaSourceId = source && (source.Id || source.MediaSourceId);
-        let streamUrl = source && source.DirectStreamUrl;
-        if (!streamUrl) {
-            const query = new URLSearchParams({ Static: 'true' });
-            if (token) query.set('api_key', token);
-            if (mediaSourceId) query.set('MediaSourceId', mediaSourceId);
-            streamUrl = `${base}/emby/videos/${encodeURIComponent(item.Id)}/stream.${streamExtension(source, item)}?${query.toString()}`;
-        } else {
-            streamUrl = addAccessToken(streamUrl, token, base);
-        }
-        return streamUrl;
-    }
-
-    function itemTitle(item, source) {
-        const path = source && source.Path || item && item.Path || '';
-        const basename = String(path).split(/[\\/]/).pop();
-        return item && (item.Name || item.SeriesName) || basename || 'Emby/Jellyfin video';
-    }
-
-    async function buildEntries(api, userId, items, settings) {
+    async function buildEntries(adapter, api, userId, items, settings) {
         const entries = new Array(items.length);
         let skipped = 0;
         let nextIndex = 0;
@@ -211,16 +245,18 @@
                 if (index >= items.length) return;
                 const item = items[index];
                 try {
-                    const source = (await getMediaSources(api, userId, item))[0];
+                    const source = (await adapterCore.getMediaSources(api, userId, item))[0];
                     if (!source) {
                         skipped += 1;
                         continue;
                     }
-                    const url = buildStreamUrl(api, item, source);
-                    if (url) entries[index] = { url, title: itemTitle(item, source) };
+                    const entry = adapterCore.buildEntry(api, item, source, adapter, {
+                        ...settings,
+                        includeStreamStartTime: false,
+                    });
+                    if (entry) entries[index] = { entry, item, source };
                     else skipped += 1;
                 } catch (_) {
-                    // 跳过没有可用媒体源的项目。
                     skipped += 1;
                 }
             }
@@ -231,44 +267,98 @@
         const playableEntries = entries.filter(Boolean);
         if (!playableEntries.length) throw new Error('没有生成可播放的视频地址');
         if (!settings.skipUnavailable && skipped) {
-            throw new Error(`有 ${skipped} 项没有可用媒体源，已按设置停止播放`);
+            throw new Error('有 ' + skipped + ' 项没有可用媒体源，已按设置停止播放');
         }
-        return playableEntries;
+
+        return playableEntries.map((record, index) => {
+            const entry = record.entry;
+            if (index === 0 || settings.resumePlayback === false) return entry;
+            const url = adapterCore.buildStreamUrl(api, record.item, record.source, adapter, {
+                ...settings,
+                includeStreamStartTime: true,
+            });
+            return url ? { ...entry, url } : entry;
+        });
     }
 
-    async function resolveSingle(api, userId, context) {
-        let item = await getItem(api, userId, context.itemId);
-        if (item && ['Series', 'Season'].includes(item.Type)) {
-            const seriesId = item.Type === 'Series' ? item.Id : (item.SeriesId || item.Id);
-            if (typeof api.getNextUpEpisodes === 'function') {
-                try {
-                    const next = await api.getNextUpEpisodes({ SeriesId: seriesId, UserId: userId, Limit: 1, Fields: 'MediaSources,MediaStreams,Path,Overview' });
-                    if (next && next.Items && next.Items[0]) item = next.Items[0];
-                } catch (_) { /* fallback below */ }
+    async function resolveSingle(adapter, api, userId, context, settings) {
+        const item = await adapterCore.getItem(api, userId, context.itemId);
+        const candidates = await adapterCore.getSingleCandidates(
+            api,
+            userId,
+            item,
+            settings.maxPlaylistItems,
+        );
+        for (const candidate of candidates) {
+            try {
+                const source = (await adapterCore.getMediaSources(api, userId, candidate))[0];
+                if (!source) continue;
+                const entry = adapterCore.buildEntry(api, candidate, source, adapter, settings);
+                if (entry) return [entry];
+            } catch (_) {
+                // 系列中某一集暂时不可用时继续寻找下一集。
             }
         }
-        const source = (await getMediaSources(api, userId, item))[0];
-        if (!source) throw new Error('当前媒体没有可用视频源');
-        return [{ url: buildStreamUrl(api, item, source), title: itemTitle(item, source) }];
+        throw new Error('当前媒体没有可用视频源');
     }
 
     async function handleRequest(data) {
         const context = data.context || {};
         const settings = normalizeSettings(data.settings);
+        if (!adapterCore) throw new Error('媒体适配器尚未加载');
+
         const api = await waitForApiClient(context.serverId, settings.requestTimeoutSeconds * 1000);
         if (!api) throw new Error('未找到页面 API');
         const userId = await getUserId(api);
         if (!userId) throw new Error('未找到当前登录用户');
-        if (data.mode === 'single') return resolveSingle(api, userId, context);
-        let items = await getPlaylistItems(api, userId, context, settings);
-        if (data.mode === 'random') items = shuffle(items);
-        return buildEntries(api, userId, items, settings);
+
+        const adapter = adapterCore.resolve(context.provider, api);
+        if (!adapter) throw new Error('未识别 Emby/Jellyfin 服务');
+
+        if (data.mode === 'single') {
+            const items = await resolveSingle(adapter, api, userId, context, settings);
+            rememberResolvedRequest(data.requestId, { api, adapter, userId, items, settings });
+            return items;
+        }
+
+        let items = await adapterCore.getPlaylistItems(api, userId, context, settings.maxPlaylistItems);
+        if (data.mode === 'random') {
+            items = items.slice();
+            for (let index = items.length - 1; index > 0; index -= 1) {
+                const swapIndex = Math.floor(Math.random() * (index + 1));
+                [items[index], items[swapIndex]] = [items[swapIndex], items[index]];
+            }
+        }
+        if (items.length > settings.maxPlaylistItems) {
+            throw new Error('当前目录有 ' + items.length + ' 项，超过当前上限 ' + settings.maxPlaylistItems + ' 项');
+        }
+
+        const entries = await buildEntries(adapter, api, userId, items, settings);
+        rememberResolvedRequest(data.requestId, { api, adapter, userId, items: entries, settings });
+        return entries;
     }
 
     page.addEventListener('message', (event) => {
-        if (event.source !== page || !event.data || event.data.source !== PAGE_SOURCE || event.data.type !== REQUEST_TYPE) return;
+        if (event.source !== page || !event.data || event.data.source !== PAGE_SOURCE) return;
+        if (event.data.type === PLAYBACK_EVENT_TYPE) {
+            if (event.data.event === 'started') startPlaybackSession(event.data);
+            else if (event.data.event === 'progress') updatePlaybackSession(event.data);
+            else if (event.data.event === 'stopped') stopPlaybackSession(event.data);
+            return;
+        }
+        if (event.data.type !== REQUEST_TYPE) return;
+        const respond = (payload) => page.postMessage({
+            source: PAGE_SOURCE,
+            type: RESPONSE_TYPE,
+            requestId: event.data.requestId,
+            mode: event.data.mode,
+            ...payload,
+        }, '*');
         void handleRequest(event.data)
-            .then((items) => page.postMessage({ source: PAGE_SOURCE, type: RESPONSE_TYPE, requestId: event.data.requestId, mode: event.data.mode, ok: true, items }, '*'))
-            .catch((error) => page.postMessage({ source: PAGE_SOURCE, type: RESPONSE_TYPE, requestId: event.data.requestId, mode: event.data.mode, ok: false, error: error && error.message || '页面媒体解析失败' }, '*'));
+            .then((items) => respond({ ok: true, items }))
+            .catch((error) => respond({
+                ok: false,
+                error: error && error.message || '页面媒体解析失败',
+            }));
     });
 })();

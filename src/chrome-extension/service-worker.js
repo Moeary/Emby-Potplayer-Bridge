@@ -8,13 +8,14 @@ const HARD_MAX_PLAYLIST_ITEMS = 4096;
 const DYNAMIC_SCRIPT_PREFIX = 'potplayer-dynamic-';
 const STATIC_ORIGINS = new Set(SETTINGS.DEFAULTS.allowedOrigins);
 let syncQueue = Promise.resolve();
+const ACTIVE_NATIVE_PORTS = new Map();
 
 function updateBadge(enabled) {
     const text = enabled ? 'P' : 'W';
     void chrome.action.setBadgeText({ text });
     void chrome.action.setBadgeBackgroundColor({ color: enabled ? '#237a4b' : '#666a73' });
     void chrome.action.setTitle({
-        title: enabled ? 'PotPlayer 外部播放（打开弹框修改设置）' : '浏览器内置播放（打开弹框修改设置）',
+        title: enabled ? '默认使用 PotPlayer（页面旁边可临时选择网页）' : '默认使用网页（页面旁边可临时选择 PotPlayer）',
     });
 }
 
@@ -61,6 +62,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     const payload = message.payload || {};
     const items = Array.isArray(payload.items) ? payload.items : [];
+    const tabId = sender && sender.tab && sender.tab.id;
     if (!items.length) {
         sendResponse({ ok: false, error: '播放列表为空' });
         return false;
@@ -69,7 +71,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     (async () => {
         try {
             const settings = await readSettings();
-            if (!settings.enabled) {
+            let senderOrigin = '';
+            try { senderOrigin = new URL(sender.url || '').origin; } catch (_) { /* 非网页消息 */ }
+            if (sender.id !== chrome.runtime.id || tabId == null
+                || !settings.allowedOrigins.includes(senderOrigin)) {
+                sendResponse({ ok: false, error: '当前网页不在允许使用的站点中' });
+                return;
+            }
+            if (!settings.enabled && payload.destination !== 'potplayer') {
                 sendResponse({ ok: false, error: 'PotPlayer 外部播放已关闭' });
                 return;
             }
@@ -79,10 +88,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             }
             const response = await sendNative({
                 type: 'play',
+                requestId: payload.requestId || '',
+                sessionId: makeSessionId(),
+                syncPlayback: settings.syncPlayback === true && tabId != null,
                 mode: payload.mode || 'single',
                 items,
                 allowedOrigins: settings.allowedOrigins,
-            });
+            }, tabId);
             sendResponse(response && response.ok
                 ? response
                 : { ok: false, error: response && response.error || '本地桥接程序没有确认播放' });
@@ -133,7 +145,7 @@ async function syncDynamicContentScripts() {
         scripts.push({
             id: makeDynamicScriptId(origin, 'page'),
             matches,
-            js: ['settings.js', 'page-bridge.js'],
+            js: ['settings.js', 'adapters/provider-core.js', 'adapters/emby.js', 'adapters/jellyfin.js', 'page-bridge.js'],
             runAt: 'document_start',
             world: 'MAIN',
             persistAcrossSessions: true,
@@ -141,7 +153,8 @@ async function syncDynamicContentScripts() {
         scripts.push({
             id: makeDynamicScriptId(origin, 'content'),
             matches,
-            js: ['settings.js', 'content-script.js'],
+            js: ['settings.js', 'playback-choice.js', 'content-script.js'],
+            css: ['playback-choice.css'],
             runAt: 'document_start',
             persistAcrossSessions: true,
         });
@@ -149,28 +162,86 @@ async function syncDynamicContentScripts() {
     await chrome.scripting.registerContentScripts(scripts);
 }
 
-function sendNative(payload) {
+function makeSessionId() {
+    if (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function') {
+        return 'potplayer-' + globalThis.crypto.randomUUID();
+    }
+    return 'potplayer-' + String(Date.now()) + '-' + Math.random().toString(36).slice(2);
+}
+
+function sendNative(payload, tabId) {
     return new Promise((resolve, reject) => {
-        let settled = false;
+        let initialSettled = false;
+        let closed = false;
         let port;
-        const finish = (callback, value) => {
-            if (settled) return;
-            settled = true;
+
+        const cleanup = () => {
+            if (tabId == null) return;
+            const current = ACTIVE_NATIVE_PORTS.get(tabId);
+            if (current && current.port === port) ACTIVE_NATIVE_PORTS.delete(tabId);
+        };
+        const close = () => {
+            if (closed) return;
+            closed = true;
+            cleanup();
             try { if (port) port.disconnect(); } catch (_) { /* ignore */ }
-            callback(value);
+        };
+        const forward = (response, eventName) => {
+            if (tabId == null) return;
+            void chrome.tabs.sendMessage(tabId, {
+                ...(response || {}),
+                type: 'potplayer-playback-event',
+                event: eventName,
+                requestId: payload.requestId || '',
+                sessionId: payload.sessionId || '',
+            }).catch(() => undefined);
         };
 
         try {
+            const previous = tabId == null ? null : ACTIVE_NATIVE_PORTS.get(tabId);
+            if (previous && previous.port) {
+                try { previous.port.disconnect(); } catch (_) { /* ignore */ }
+            }
+
             port = chrome.runtime.connectNative(NATIVE_HOST);
-            port.onMessage.addListener((response) => finish(resolve, response));
-            port.onDisconnect.addListener(() => {
-                if (settled) return;
-                const lastError = chrome.runtime.lastError;
-                finish(reject, new Error(lastError && lastError.message || 'Native Messaging 连接已断开'));
+            if (tabId != null) ACTIVE_NATIVE_PORTS.set(tabId, {
+                port,
+                sessionId: payload.sessionId || '',
             });
-            port.postMessage(payload);
+            port.onMessage.addListener((response) => {
+                if (!initialSettled) {
+                    initialSettled = true;
+                    if (!response || response.ok !== true) {
+                        close();
+                        resolve(response);
+                        return;
+                    }
+                    resolve({ ...response, sessionId: payload.sessionId || '' });
+                    return;
+                }
+                if (response && response.type === 'playback-progress') {
+                    forward(response, 'progress');
+                } else if (response && response.type === 'playback-stopped') {
+                    forward(response, 'stopped');
+                    close();
+                }
+            });
+            port.onDisconnect.addListener(() => {
+                if (closed) return;
+                cleanup();
+                if (!initialSettled) {
+                    closed = true;
+                    const lastError = chrome.runtime.lastError;
+                    reject(new Error(lastError && lastError.message || 'Native Messaging 连接已断开'));
+                    return;
+                }
+                forward({ type: 'playback-stopped' }, 'stopped');
+                closed = true;
+            });
+            port.postMessage({ ...payload, sessionId: payload.sessionId || makeSessionId() });
         } catch (error) {
-            finish(reject, error);
+            close();
+            reject(error);
         }
     });
 }

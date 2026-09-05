@@ -74,6 +74,8 @@ function fillForm(values) {
     $('requestTimeoutSeconds').value = values.requestTimeoutSeconds;
     $('skipUnavailable').checked = values.skipUnavailable;
     $('fallbackToBrowser').checked = values.fallbackToBrowser;
+    $('resumePlayback').checked = values.resumePlayback;
+    $('syncPlayback').checked = values.syncPlayback;
     origins = values.allowedOrigins.slice();
     renderOrigins();
 }
@@ -86,6 +88,8 @@ function readForm() {
         requestTimeoutSeconds: $('requestTimeoutSeconds').value,
         skipUnavailable: $('skipUnavailable').checked,
         fallbackToBrowser: $('fallbackToBrowser').checked,
+        resumePlayback: $('resumePlayback').checked,
+        syncPlayback: $('syncPlayback').checked,
         allowedOrigins: origins,
     });
 }
@@ -133,7 +137,7 @@ $('enabled').addEventListener('change', () => {
     const enabled = $('enabled').checked;
     chrome.storage.local.set({ enabled }, () => {
         const error = chrome.runtime.lastError;
-        setStatus(error ? '启用状态保存失败' : (enabled ? '已立即启用 PotPlayer' : '已立即关闭 PotPlayer'));
+        setStatus(error ? '启用状态保存失败' : (enabled ? '默认使用 PotPlayer' : '默认使用网页；仍可临时选择 PotPlayer'));
     });
 });
 $('add-origin').addEventListener('click', () => {

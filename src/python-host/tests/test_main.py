@@ -56,6 +56,34 @@ class MainTests(unittest.TestCase):
             self.assertTrue(playlist_path.is_file())
             self.assertIn("#EXTINF:-1,第一集\r\n", playlist_path.read_bytes().decode("utf-8"))
 
+    def test_resume_position_adds_seek_switch(self) -> None:
+        with tempfile.TemporaryDirectory() as root, tempfile.TemporaryDirectory() as temp_dir:
+            app_dir = Path(root)
+            player = app_dir / "PotPlayerMini64.exe"
+            player.write_bytes(b"fake exe")
+            calls: list[list[str]] = []
+            response = host_main.handle_request(
+                {
+                    "type": "play",
+                    "items": [{
+                        "url": "https://emby.moear.de/a.mp4",
+                        "title": "第一集",
+                        "itemId": "item-1",
+                        "mediaSourceId": "source-1",
+                        "startPositionTicks": 12_340_000,
+                    }],
+                    "allowedOrigins": [],
+                    "sessionId": "test-session",
+                    "syncPlayback": False,
+                },
+                app_dir=app_dir,
+                temp_dir=temp_dir,
+                environment={},
+                process_launcher=lambda command: calls.append(list(command)),
+            )
+            self.assertEqual(response["sessionId"], "test-session")
+            self.assertEqual(calls[0][-1], "/seek=00:00:01.234")
+
     def test_invalid_json_returns_error_frame_and_safe_log(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             incoming = BytesIO()

@@ -8,6 +8,8 @@
         requestTimeoutSeconds: 120,
         fallbackToBrowser: true,
         skipUnavailable: true,
+        resumePlayback: true,
+        syncPlayback: true,
         allowedOrigins: Object.freeze([
             'https://emby.moear.de',
             'https://jellyfin.moear.de',
@@ -18,6 +20,20 @@
         const number = Number(value);
         if (!Number.isFinite(number)) return fallback;
         return Math.min(max, Math.max(min, Math.round(number)));
+    }
+
+    function readBoolean(value, fallback) {
+        if (typeof value === 'boolean') return value;
+        if (typeof value === 'number') {
+            if (value === 1) return true;
+            if (value === 0) return false;
+        }
+        if (typeof value === 'string') {
+            const text = value.trim().toLowerCase();
+            if (['true', '1', 'on', 'yes'].includes(text)) return true;
+            if (['false', '0', 'off', 'no'].includes(text)) return false;
+        }
+        return fallback;
     }
 
     function normalizeOrigin(value) {
@@ -40,12 +56,14 @@
             : DEFAULTS.allowedOrigins;
         const allowedOrigins = [...new Set(rawOrigins.map(normalizeOrigin).filter(Boolean))];
         return {
-            enabled: source.enabled !== false,
+            enabled: readBoolean(source.enabled, DEFAULTS.enabled),
             maxPlaylistItems: clampInteger(source.maxPlaylistItems, DEFAULTS.maxPlaylistItems, 1, 4096),
             mediaSourceConcurrency: clampInteger(source.mediaSourceConcurrency, DEFAULTS.mediaSourceConcurrency, 1, 12),
             requestTimeoutSeconds: clampInteger(source.requestTimeoutSeconds, DEFAULTS.requestTimeoutSeconds, 15, 300),
             fallbackToBrowser: source.fallbackToBrowser !== false,
             skipUnavailable: source.skipUnavailable !== false,
+            resumePlayback: source.resumePlayback !== false,
+            syncPlayback: source.syncPlayback !== false,
             allowedOrigins,
         };
     }

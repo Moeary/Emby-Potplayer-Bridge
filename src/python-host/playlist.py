@@ -25,6 +25,10 @@ DEFAULT_ALLOWED_ORIGINS = (
 class PlaylistEntry:
     url: str
     title: str
+    item_id: str = ""
+    media_source_id: str = ""
+    start_position_ticks: int = 0
+    runtime_ticks: int = 0
 
 
 def _origin_parts(value: str) -> tuple[str, str, int] | None:
@@ -85,6 +89,22 @@ def _fallback_title(url: str) -> str:
     return segments[-1].strip("/") if segments else "Emby/Jellyfin video"
 
 
+def _safe_text(value: Any) -> str:
+    return value.strip() if isinstance(value, str) else ""
+
+
+def _safe_ticks(value: Any) -> int:
+    if isinstance(value, bool):
+        return 0
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return 0
+    if number != number or number in (float("inf"), float("-inf")):
+        return 0
+    return max(0, int(number))
+
+
 def validate_entries(
     raw_entries: Any,
     allowed_origins: Iterable[str] | None,
@@ -116,7 +136,18 @@ def validate_entries(
         title = raw_title.replace("\r", " ").replace("\n", " ").strip()
         if not title:
             title = _fallback_title(raw_url)
-        entries.append(PlaylistEntry(raw_url, title))
+        item_id = _safe_text(_value(raw_entry, "itemId"))
+        media_source_id = _safe_text(_value(raw_entry, "mediaSourceId"))
+        start_position_ticks = _safe_ticks(_value(raw_entry, "startPositionTicks"))
+        runtime_ticks = _safe_ticks(_value(raw_entry, "runtimeTicks"))
+        entries.append(PlaylistEntry(
+            raw_url,
+            title,
+            item_id,
+            media_source_id,
+            start_position_ticks,
+            runtime_ticks,
+        ))
         if len(entries) > max_items:
             raise ValueError(f"播放列表项目超过 {max_items} 项")
     return entries

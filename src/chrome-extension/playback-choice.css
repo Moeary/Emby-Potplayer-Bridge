@@ -1,0 +1,41 @@
+/* 独立样式与类名，避免触发站点对 .btnPlay / .detailButton 的委托事件。 */
+button.potplayer-choice-button {
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 1 auto;
+    gap: .5em;
+    min-height: 2.6em;
+    height: var(--potplayer-choice-height, auto);
+    max-width: 100%;
+    margin: 0 .6em .6em 0;
+    padding: .7em 1.1em;
+    border: 1px solid rgba(150, 150, 150, .4);
+    border-radius: 999px;
+    background: rgba(128, 128, 128, .16);
+    color: inherit;
+    font: inherit;
+    font-weight: 600;
+    line-height: 1.25;
+    text-align: center;
+    text-decoration: none;
+    cursor: pointer;
+    vertical-align: middle;
+    touch-action: manipulation;
+    transition: background-color .15s, border-color .15s;
+}
+
+button.potplayer-choice-button:hover {
+    background: rgba(128, 128, 128, .32);
+    border-color: currentColor;
+}
+
+button.potplayer-choice-button:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 3px;
+}
+
+button.potplayer-choice-button:active {
+    background: rgba(128, 128, 128, .44);
+}
