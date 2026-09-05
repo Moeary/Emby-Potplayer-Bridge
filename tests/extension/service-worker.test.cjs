@@ -8,7 +8,7 @@ const vm = require('node:vm');
 const sourceDir = path.resolve(__dirname, '../../src/chrome-extension');
 
 function createWorker(overrides = {}) {
-    const values = { enabled: true, allowedOrigins: ['https://emby.moear.de'], ...overrides };
+    const values = { allowedOrigins: ['https://emby.moear.de'], ...overrides };
     const nativeRequests = [];
     const registrations = [];
     let handleMessage;
@@ -35,7 +35,7 @@ function createWorker(overrides = {}) {
         storage: {
             local: {
                 get(_keys, callback) { queueMicrotask(() => callback({ ...values })); },
-                async set() { throw new Error('一次性播放不得修改默认设置'); },
+                async set() { throw new Error('固定播放入口测试不得修改播放器状态'); },
             },
             onChanged: event(),
         },
@@ -60,7 +60,7 @@ function createWorker(overrides = {}) {
     };
 }
 
-function play(destination = 'default') {
+function play(destination = 'potplayer') {
     return {
         type: 'play-media',
         payload: {
@@ -70,42 +70,37 @@ function play(destination = 'default') {
     };
 }
 
-test('默认网页时，一次性选择 PotPlayer 可启动且不修改默认值', async () => {
-    const worker = createWorker({ enabled: false });
-    assert.equal((await worker.send(play('potplayer'))).ok, true);
-    assert.equal(worker.values.enabled, false);
+test('固定 PotPlayer 请求不读取或受默认播放器状态影响', async () => {
+    const worker = createWorker({ enabled: false, defaultPlayer: 'web' });
+    const response = await worker.send(play('potplayer'));
+    assert.equal(response.ok, true);
     assert.equal(worker.nativeRequests.length, 1);
     assert.equal(worker.nativeRequests[0].items[0].itemId, 'ep4');
 });
 
-test('默认网页时，普通请求仍被拒绝', async () => {
-    const worker = createWorker({ enabled: false });
-    assert.equal((await worker.send(play())).ok, false);
-    assert.equal(worker.nativeRequests.length, 0);
+test('内容脚本可以从后台读取不含播放器状态的统一设置', async () => {
+    const worker = createWorker({ enabled: false, defaultPlayer: 'web' });
+    const response = await worker.send({ type: 'get-settings' });
+    assert.equal(response.ok, true);
+    assert.equal(response.settings.enabled, undefined);
+    assert.equal(response.settings.defaultPlayer, undefined);
+    assert.equal(response.settings.allowedOrigins[0], 'https://emby.moear.de');
 });
 
-test('兼容旧版字符串配置，false 仍表示默认网页', async () => {
-    const worker = createWorker({ enabled: 'false' });
-    assert.equal((await worker.send(play())).ok, false);
-    assert.equal((await worker.send(play('potplayer'))).ok, true);
-    assert.equal(worker.nativeRequests.length, 1);
-});
-
-test('显式网页默认优先于旧版 enabled 值', async () => {
-    const worker = createWorker({ enabled: true, defaultPlayer: 'web' });
-    assert.equal((await worker.send(play())).ok, false);
-    assert.equal((await worker.send(play('potplayer'))).ok, true);
-    assert.equal(worker.nativeRequests.length, 1);
-});
-
-test('默认 PotPlayer 时，普通请求仍按原模式启动', async () => {
+test('固定请求保留播放模式', async () => {
     const worker = createWorker();
     assert.equal((await worker.send(play())).ok, true);
     assert.equal(worker.nativeRequests[0].mode, 'single');
 });
 
-test('一次性选择不能绕过站点来源校验', async () => {
-    const worker = createWorker({ enabled: false });
+test('网页目标不能从后台直接启动 PotPlayer', async () => {
+    const worker = createWorker();
+    assert.equal((await worker.send(play('web'))).ok, false);
+    assert.equal(worker.nativeRequests.length, 0);
+});
+
+test('固定 PotPlayer 入口不能绕过站点来源校验', async () => {
+    const worker = createWorker();
     const response = await worker.send(play('potplayer'), {
         id: 'bridge-extension', tab: { id: 7 }, url: 'https://unlisted.example.test/',
     });
@@ -122,8 +117,8 @@ test('非当前扩展的消息不能触发 PotPlayer', async () => {
     assert.equal(worker.nativeRequests.length, 0);
 });
 
-test('一次性选择仍遵守播放列表上限', async () => {
-    const worker = createWorker({ enabled: false, maxPlaylistItems: 1 });
+test('固定 PotPlayer 入口仍遵守播放列表上限', async () => {
+    const worker = createWorker({ maxPlaylistItems: 1 });
     const request = play('potplayer');
     request.payload.items.push({ itemId: 'ep5', url: 'https://emby.moear.de/videos/ep5/stream.mkv' });
     assert.equal((await worker.send(request)).ok, false);

@@ -10,15 +10,6 @@ const STATIC_ORIGINS = new Set(SETTINGS.DEFAULTS.allowedOrigins);
 let syncQueue = Promise.resolve();
 const ACTIVE_NATIVE_PORTS = new Map();
 
-function updateBadge(enabled) {
-    const text = enabled ? 'P' : 'W';
-    void chrome.action.setBadgeText({ text });
-    void chrome.action.setBadgeBackgroundColor({ color: enabled ? '#237a4b' : '#666a73' });
-    void chrome.action.setTitle({
-        title: enabled ? '默认使用 PotPlayer（页面旁边可临时选择网页）' : '默认使用网页（页面旁边可临时选择 PotPlayer）',
-    });
-}
-
 function readSettings() {
     return new Promise((resolve) => {
         chrome.storage.local.get(null, (values) => resolve(SETTINGS.normalize(values)));
@@ -28,7 +19,6 @@ function readSettings() {
 async function initializeSettings() {
     const values = await readSettings();
     await chrome.storage.local.set(values);
-    updateBadge(values.defaultPlayer === 'potplayer');
     await scheduleDynamicContentSync();
 }
 
@@ -42,14 +32,23 @@ chrome.runtime.onStartup.addListener(() => {
 
 chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
-    void readSettings().then((values) => {
-        updateBadge(values.defaultPlayer === 'potplayer');
+    void readSettings().then(() => {
         return scheduleDynamicContentSync();
     }).catch((error) => console.warn('[PotPlayer Bridge]', error));
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (!message) return false;
+
+    if (message.type === 'get-settings') {
+        readSettings()
+            .then((settings) => sendResponse({ ok: true, settings }))
+            .catch((error) => sendResponse({
+                ok: false,
+                error: error && error.message || '无法读取扩展设置',
+            }));
+        return true;
+    }
 
     if (message.type === 'sync-content-scripts') {
         scheduleDynamicContentSync()
@@ -78,8 +77,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 sendResponse({ ok: false, error: '当前网页不在允许使用的站点中' });
                 return;
             }
-            if (settings.defaultPlayer !== 'potplayer' && payload.destination !== 'potplayer') {
-                sendResponse({ ok: false, error: 'PotPlayer 外部播放已关闭' });
+            if (payload.destination !== 'potplayer') {
+                sendResponse({ ok: false, error: '仅 PotPlayer 按钮可以启动本地播放器' });
                 return;
             }
             if (items.length > Math.min(settings.maxPlaylistItems, HARD_MAX_PLAYLIST_ITEMS)) {

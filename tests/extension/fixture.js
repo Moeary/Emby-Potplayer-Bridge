@@ -2,7 +2,7 @@
 
 (() => {
     const PAGE_SOURCE = 'codex-emby-jellyfin-potplayer-page';
-    const values = { enabled: true, defaultPlayer: 'potplayer', allowedOrigins: [location.origin], syncPlayback: false };
+    const values = { allowedOrigins: [location.origin], syncPlayback: false };
     const changes = [];
     const requests = [];
     const nativeCalls = [];
@@ -12,10 +12,11 @@
     let heldNativeCallback = null;
 
     function showActivity() {
+        const latest = nativeCalls.at(-1);
         document.getElementById('activity').textContent =
-            '默认：' + (values.enabled ? 'PotPlayer' : '网页') +
+            '固定入口：左网页 / 右 PotPlayer' +
             ' · 网页播放 ' + webCalls + ' 次 · PotPlayer ' + nativeCalls.length + ' 次' +
-            (nativeCalls.length ? '\n最近条目：' + nativeCalls.at(-1).items[0].itemId : '');
+            (latest ? '\n最近条目：' + latest.items[0].itemId : '');
     }
 
     // 只模拟扩展运行环境，不会写入真实 Chrome 扩展设置。
@@ -23,13 +24,17 @@
         storage: {
             local: {
                 get(_keys, callback) { queueMicrotask(() => callback({ ...values })); },
-                set() { throw new Error('一次性选择不得写入设置'); },
+                set() { throw new Error('固定播放入口测试不得写入播放器状态'); },
             },
             onChanged: { addListener(fn) { changes.push(fn); } },
         },
         runtime: {
             onMessage: { addListener() {} },
             sendMessage(message, callback) {
+                if (message.type === 'get-settings') {
+                    queueMicrotask(() => callback({ ok: true, settings: { ...values } }));
+                    return;
+                }
                 nativeCalls.push(message.payload);
                 showActivity();
                 if (holdNative) heldNativeCallback = callback;
@@ -38,12 +43,8 @@
         },
     };
 
-    function setDefaults(updates) {
-        const hasDefaultPlayer = Object.prototype.hasOwnProperty.call(updates, 'defaultPlayer');
+    function setSettings(updates) {
         Object.assign(values, updates);
-        if (Object.prototype.hasOwnProperty.call(updates, 'enabled') && !hasDefaultPlayer) {
-            values.defaultPlayer = updates.enabled ? 'potplayer' : 'web';
-        }
         changes.forEach((fn) => fn({}, 'local'));
         showActivity();
     }
@@ -74,14 +75,15 @@
         setTimeout(() => requestAnimationFrame(() => requestAnimationFrame(resolve)), 0);
     });
     const primary = () => document.querySelector('#detail-controls .btnResume');
-    const alternate = () => document.querySelector('#detail-controls [data-potplayer-choice]');
+    const groupFor = (target) => target && target.nextElementSibling?.matches('[data-potplayer-choice-group]')
+        ? target.nextElementSibling : null;
+    const buttonFor = (target, destination) => groupFor(target)?.querySelector(
+        `[data-potplayer-destination="${destination}"]`,
+    );
     const assert = (condition, message) => { if (!condition) throw new Error(message); };
 
     window.addEventListener('DOMContentLoaded', () => {
         location.hash = '!/item?id=ep4&serverId=fixture';
-        document.getElementById('default-player').addEventListener('change', (event) => {
-            setDefaults({ enabled: event.target.value === 'potplayer' });
-        });
         document.getElementById('run-tests').addEventListener('click', async (event) => {
             event.target.disabled = true;
             const output = document.getElementById('test-results');
@@ -94,79 +96,93 @@
             }
             await settle();
 
-            await check('默认 PotPlayer 时显示网页按钮且不重复添加', async () => {
-                assert(alternate()?.textContent === '在网页中播放', '按钮文本错误');
-                assert(primary().nextElementSibling === alternate(), '按钮不在原按钮右侧');
-                assert(document.querySelectorAll('#detail-controls [data-potplayer-choice]').length === 1, '重复按钮');
+            await check('详情页显示固定网页 / PotPlayer 连体按钮', async () => {
+                const group = groupFor(primary());
+                assert(group, '未生成按钮组');
+                assert(group.querySelectorAll('[data-potplayer-choice]').length === 2, '按钮数量错误');
+                assert(buttonFor(primary(), 'web').textContent === '在网页中播放', '左侧按钮文本错误');
+                assert(buttonFor(primary(), 'potplayer').textContent === '在PotPlayer中播放', '右侧按钮文本错误');
+                assert(primary().hidden && primary().getAttribute('aria-hidden') === 'true', '原按钮未隐藏');
             });
-            await check('网页选择仅放行原按钮一次，下次仍使用 PotPlayer', async () => {
-                const webBefore = webCalls, nativeBefore = nativeCalls.length;
-                alternate().click(); await settle();
-                assert(webCalls === webBefore + 1 && nativeCalls.length === nativeBefore, '网页被重新拦截');
-                assert(values.enabled === true, '默认值改变');
-                primary().click(); await settle();
-                assert(nativeCalls.length === nativeBefore + 1, '下次点击未使用 PotPlayer');
-                assert(nativeCalls.at(-1).destination === 'default', '普通点击被当成手动选择');
-                assert(nativeCalls.at(-1).items[0].itemId === 'ep4', 'EP4 条目错误');
+            await check('左侧网页按钮只调用网页播放器', async () => {
+                const webBefore = webCalls;
+                const nativeBefore = nativeCalls.length;
+                buttonFor(primary(), 'web').click(); await settle();
+                assert(webCalls === webBefore + 1, '网页播放器未调用');
+                assert(nativeCalls.length === nativeBefore, '网页按钮触发了 PotPlayer');
             });
-            await check('默认网页时可单次 PotPlayer，随后普通点击仍为网页', async () => {
-                setDefaults({ enabled: false }); await settle();
-                assert(alternate()?.textContent === '在PotPlayer中播放', '按钮未更新');
-                const nativeBefore = nativeCalls.length, webBefore = webCalls;
-                alternate().click(); await settle();
-                assert(nativeCalls.length === nativeBefore + 1, '未发送 PotPlayer 请求');
-                assert(nativeCalls.at(-1).destination === 'potplayer', '缺少单次覆盖');
-                primary().click(); await settle();
-                assert(webCalls === webBefore + 1 && values.enabled === false, '默认网页被改变');
+            await check('右侧 PotPlayer 按钮发送 EP4 且不依赖默认状态', async () => {
+                setSettings({ enabled: false, defaultPlayer: 'web' });
+                await settle();
+                const before = nativeCalls.length;
+                buttonFor(primary(), 'potplayer').click(); await settle();
+                const call = nativeCalls.at(-1);
+                assert(nativeCalls.length === before + 1, 'PotPlayer 请求未发送');
+                assert(call.destination === 'potplayer', '目标不是 PotPlayer');
+                assert(call.items[0].itemId === 'ep4', 'EP4 条目错误');
             });
-            await check('播放全部和随机播放保留原模式', async () => {
+            await check('两个入口可连续使用且不会互相改写', async () => {
+                const webBefore = webCalls;
+                const nativeBefore = nativeCalls.length;
+                buttonFor(primary(), 'web').click(); await settle();
+                buttonFor(primary(), 'potplayer').click(); await settle();
+                assert(webCalls === webBefore + 1, '网页入口次数错误');
+                assert(nativeCalls.length === nativeBefore + 1, 'PotPlayer 入口次数错误');
+            });
+            await check('播放全部和随机播放也各自保留双按钮与模式', async () => {
                 for (const [selector, mode] of [['.itemsViewSettingsContainer .btnPlay', 'all'], ['.btnShuffle', 'random']]) {
-                    document.querySelector(selector).nextElementSibling.click(); await settle();
+                    const original = document.querySelector(selector);
+                    const group = groupFor(original);
+                    assert(group && group.querySelectorAll('[data-potplayer-choice]').length === 2, '缺少模式按钮');
+                    buttonFor(original, 'potplayer').click(); await settle();
                     assert(nativeCalls.at(-1).mode === mode, '错误播放模式 ' + mode);
                 }
             });
             await check('改选网页后，迟到的媒体解析不会启动 PotPlayer', async () => {
-                setDefaults({ enabled: true }); await settle();
                 holdResponses = true;
-                primary().click(); await settle();
-                const pending = requests.at(-1), before = nativeCalls.length;
-                alternate().click(); respond(pending); await settle();
+                buttonFor(primary(), 'potplayer').click(); await settle();
+                const pending = requests.at(-1);
+                const before = nativeCalls.length;
+                buttonFor(primary(), 'web').click(); await settle();
+                respond(pending); await settle();
                 assert(nativeCalls.length === before, '旧解析结果仍触发播放');
                 holdResponses = false;
             });
             await check('改选网页后，迟到的 Host 失败不会重复回退', async () => {
                 holdNative = true;
-                primary().click(); await settle();
+                buttonFor(primary(), 'potplayer').click(); await settle();
                 assert(typeof heldNativeCallback === 'function', '未建立测试请求');
                 const before = webCalls;
-                alternate().click();
+                buttonFor(primary(), 'web').click(); await settle();
                 heldNativeCallback({ ok: false, error: '模拟失败' }); await settle();
                 assert(webCalls === before + 1, '迟到失败重复点击网页');
                 holdNative = false;
+                heldNativeCallback = null;
             });
-            await check('详情页节点重建后保留一个按钮，使用新条目 ID', async () => {
+            await check('详情页节点重建后使用新条目 ID', async () => {
                 location.hash = '!/item?id=ep5&serverId=fixture';
                 const replacement = primary().cloneNode(true);
+                replacement.hidden = false;
+                replacement.removeAttribute('aria-hidden');
+                replacement.removeAttribute('data-potplayer-choice-original');
                 document.getElementById('detail-controls').replaceChildren(replacement);
                 await settle();
-                assert(document.querySelectorAll('#detail-controls [data-potplayer-choice]').length === 1, '重建后重复/缺失');
-                primary().click(); await settle();
+                assert(document.querySelectorAll('#detail-controls [data-potplayer-choice]').length === 2, '重建后按钮数量错误');
+                buttonFor(primary(), 'potplayer').click(); await settle();
                 assert(nativeCalls.at(-1).items[0].itemId === 'ep5', '仍在使用旧 EP4');
             });
-            await check('原按钮隐藏或禁用时移除入口，恢复后重建', async () => {
-                primary().hidden = true; await settle();
-                assert(!alternate(), '隐藏按钮仍可点击');
-                primary().hidden = false; primary().disabled = true; await settle();
-                assert(!alternate(), '禁用按钮仍可点击');
+            await check('原始控件禁用时移除入口，恢复后重建', async () => {
+                primary().disabled = true; await settle();
+                assert(!groupFor(primary()), '禁用按钮仍有入口');
                 primary().disabled = false; await settle();
-                assert(Boolean(alternate()), '未恢复按钮');
+                assert(groupFor(primary())?.querySelectorAll('[data-potplayer-choice]').length === 2, '未恢复双按钮');
             });
-            await check('移除允许站点后不再显示单次入口', async () => {
-                setDefaults({ allowedOrigins: [] }); await settle();
+            await check('移除允许站点后不再显示入口', async () => {
+                setSettings({ allowedOrigins: [] }); await settle();
                 assert(document.querySelectorAll('[data-potplayer-choice]').length === 0, '未获准站点仍有入口');
-                setDefaults({ allowedOrigins: [location.origin] }); await settle();
+                setSettings({ allowedOrigins: [location.origin] }); await settle();
             });
-            await check('窄容器自动换行，不横向溢出', async () => {
+            await check('窄容器不产生横向溢出', async () => {
                 const stage = document.getElementById('stage');
                 stage.style.width = '320px'; await settle();
                 assert(stage.scrollWidth <= stage.clientWidth + 1, '按钮溢出');
@@ -174,8 +190,7 @@
             });
 
             location.hash = '!/item?id=ep4&serverId=fixture';
-            setDefaults({ enabled: true, allowedOrigins: [location.origin] });
-            document.getElementById('default-player').value = 'potplayer';
+            setSettings({ allowedOrigins: [location.origin] });
             output.className = failures ? 'fail' : 'pass';
             output.textContent = results.join('\n') + '\n' + (results.length - failures) + '/' + results.length + ' 通过';
             event.target.disabled = false;

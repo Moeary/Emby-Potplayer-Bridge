@@ -37,9 +37,6 @@
       background: var(--panel);
     }
     .section-title { margin-bottom: 10px; color: #dbe4f5; font-size: 12px; font-weight: 650; }
-    .switch-row, .check-row { display: flex; align-items: center; gap: 9px; cursor: pointer; }
-    .switch-row { justify-content: space-between; }
-    .switch-row span { font-size: 14px; font-weight: 600; }
     input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent-strong); }
     .field { display: grid; grid-template-columns: 1fr 106px; align-items: center; gap: 10px; margin-top: 9px; }
     .field label { color: var(--muted); }
@@ -102,11 +99,8 @@
   </header>
 
   <section class="section">
-    <label class="switch-row">
-      <span>默认使用 PotPlayer 播放</span>
-      <input id="enabled" type="checkbox">
-    </label>
-    <p class="hint">勾选 = 默认 PotPlayer；取消 = 默认网页。详情页播放按钮右侧始终是另一种方式，仅本次生效；开关立即生效。</p>
+    <div class="section-title">播放方式</div>
+    <p class="hint">详情页和列表播放控件固定显示两个连体按钮：左侧在网页中播放，右侧在 PotPlayer 中播放。两种入口互不切换，也不读取或保存默认播放器状态。</p>
   </section>
 
   <section class="section">

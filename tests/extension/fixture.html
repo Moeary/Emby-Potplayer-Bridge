@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>播放方式切换 · 扩展回归测试</title>
+<title>固定双按钮 · 扩展回归测试</title>
 <link rel="stylesheet" href="../../src/chrome-extension/playback-choice.css">
 <style>
     :root { color-scheme: dark; font: 16px/1.55 system-ui, sans-serif; background: #1e1e1e; color: #eee; }
@@ -27,10 +27,9 @@
 <script defer src="../../src/chrome-extension/content-script.js"></script>
 </head>
 <body>
-<h1>选择本次播放方式</h1>
+<h1>固定网页 / PotPlayer 双按钮</h1>
 <p>使用实际扩展代码与模拟 Emby 控件；所有媒体解析、网页播放和 Native Host 调用均为本地测试，不连接真实媒体服务。</p>
 <div class="tools">
-    <label>默认方式 <select id="default-player"><option value="potplayer">PotPlayer</option><option value="web">网页</option></select></label>
     <button id="run-tests" type="button">运行交互回归测试</button>
 </div>
 <section class="stage" id="stage">
@@ -39,7 +38,7 @@
         <button type="button" class="btnResume raised detailButton" data-mode="resume" title="播放" aria-label="播放"><span class="icon">▶</span><span class="detailButton-lowres">播放</span><span class="detailButton-highres">播放</span></button>
         <button type="button" class="favorite" aria-label="收藏">♡</button>
     </div>
-    <p>原按钮遵循默认；右侧按钮仅对本次生效。</p>
+    <p>扩展会把原始站点播放入口替换为固定的网页 / PotPlayer 连体按钮。</p>
 </section>
 <div class="itemsViewSettingsContainer">
     <button type="button" class="btnPlay">播放全部</button>

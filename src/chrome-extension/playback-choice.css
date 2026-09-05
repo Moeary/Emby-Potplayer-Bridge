@@ -1,19 +1,32 @@
-/* 独立样式与类名，避免触发站点对 .btnPlay / .detailButton 的委托事件。 */
+/* 两个固定入口连成一组；不依赖站点的 .btnPlay / .detailButton 样式或事件。 */
+.potplayer-choice-group {
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: stretch;
+    max-width: 100%;
+    margin: 0 .6em .6em 0;
+    overflow: hidden;
+    border: 1px solid rgba(150, 150, 150, .4);
+    border-radius: 999px;
+    background: rgba(128, 128, 128, .16);
+    color: inherit;
+    vertical-align: middle;
+}
+
 button.potplayer-choice-button {
     box-sizing: border-box;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    flex: 0 1 auto;
-    gap: .5em;
+    flex: 1 1 auto;
+    min-width: 0;
     min-height: 2.6em;
-    height: var(--potplayer-choice-height, auto);
     max-width: 100%;
-    margin: 0 .6em .6em 0;
+    margin: 0;
     padding: .7em 1.1em;
-    border: 1px solid rgba(150, 150, 150, .4);
-    border-radius: 999px;
-    background: rgba(128, 128, 128, .16);
+    border: 0;
+    border-radius: 0;
+    background: transparent;
     color: inherit;
     font: inherit;
     font-weight: 600;
@@ -21,21 +34,32 @@ button.potplayer-choice-button {
     text-align: center;
     text-decoration: none;
     cursor: pointer;
-    vertical-align: middle;
     touch-action: manipulation;
-    transition: background-color .15s, border-color .15s;
+    transition: background-color .15s, color .15s;
+}
+
+button.potplayer-choice-button + button.potplayer-choice-button {
+    border-left: 1px solid rgba(150, 150, 150, .4);
 }
 
 button.potplayer-choice-button:hover {
     background: rgba(128, 128, 128, .32);
-    border-color: currentColor;
 }
 
 button.potplayer-choice-button:focus-visible {
+    position: relative;
+    z-index: 1;
     outline: 2px solid currentColor;
-    outline-offset: 3px;
+    outline-offset: -3px;
 }
 
 button.potplayer-choice-button:active {
     background: rgba(128, 128, 128, .44);
+}
+
+@media (max-width: 520px) {
+    button.potplayer-choice-button {
+        padding-right: .8em;
+        padding-left: .8em;
+    }
 }

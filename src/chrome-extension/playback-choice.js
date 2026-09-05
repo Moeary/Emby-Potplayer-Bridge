@@ -1,24 +1,19 @@
 'use strict';
 
 (() => {
+    const GROUP_SELECTOR = '[data-potplayer-choice-group]';
     const BUTTON_SELECTOR = '[data-potplayer-choice]';
+    const DESTINATION_ATTRIBUTE = 'data-potplayer-destination';
+    const ORIGINAL_ATTRIBUTE = 'data-potplayer-choice-original';
+    const ORIGINAL_SELECTOR = `[${ORIGINAL_ATTRIBUTE}]`;
     const CONTROL_SELECTOR = [
         '.detailButtons button', '.detailButtons a', '.detailButtons [role="button"]',
         '.mainDetailButtons button', '.mainDetailButtons a',
         '.itemsViewSettingsContainer button', '.itemsViewSettingsContainer a',
     ].join(',');
 
-    function getDefaultDestination(settings) {
-        const configured = settings && settings.defaultPlayer;
-        if (configured === 'web' || configured === 'potplayer') return configured;
-        return settings && settings.enabled === false ? 'web' : 'potplayer';
-    }
-
-    function getAlternateDestination(settings) {
-        return getDefaultDestination(settings) === 'potplayer' ? 'web' : 'potplayer';
-    }
     function create({ getSettings, getMode }) {
-        const buttons = new Map();
+        const groups = new Map();
         const originals = new WeakMap();
         let scheduled = false;
 
@@ -29,49 +24,95 @@
                 && target.getClientRects().length > 0;
         }
 
+        function createButton(destination) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'potplayer-choice-button';
+            button.setAttribute('data-potplayer-choice', '');
+            button.setAttribute(DESTINATION_ATTRIBUTE, destination);
+            button.setAttribute('data-destination', destination);
+            return button;
+        }
+
+        function getVerb(mode) {
+            if (mode === 'random') return '随机播放';
+            if (mode === 'all') return '播放全部';
+            return '播放';
+        }
+
+        function updateButton(button, destination, mode) {
+            const player = destination === 'web' ? '网页' : 'PotPlayer';
+            const label = '在' + player + '中' + getVerb(mode);
+            button.textContent = label;
+            button.title = label;
+            button.setAttribute('aria-label', label);
+        }
+
+        function restoreOriginal(entry) {
+            const target = entry.target;
+            if (!target.isConnected) return;
+            target.hidden = entry.originalHidden;
+            if (entry.originalAriaHidden === null) target.removeAttribute('aria-hidden');
+            else target.setAttribute('aria-hidden', entry.originalAriaHidden);
+            target.removeAttribute(ORIGINAL_ATTRIBUTE);
+        }
+
+        function removeGroup(target, entry) {
+            entry.group.remove();
+            restoreOriginal(entry);
+            groups.delete(target);
+        }
+
         function syncButtons() {
             scheduled = false;
             const settings = getSettings();
-            const allowed = settings && settings.allowedOrigins.includes(location.origin);
+            const allowed = Boolean(settings && Array.isArray(settings.allowedOrigins)
+                && settings.allowedOrigins.includes(location.origin));
             const controls = allowed
-                ? [...document.querySelectorAll(CONTROL_SELECTOR)]
-                    .filter((target) => !target.matches(BUTTON_SELECTOR) && getMode(target) && isVisible(target))
+                ? [...document.querySelectorAll(CONTROL_SELECTOR)].filter((target) => (
+                    !target.matches(BUTTON_SELECTOR)
+                    && !target.closest(GROUP_SELECTOR)
+                    && getMode(target)
+                    && (target.matches(ORIGINAL_SELECTOR) || isVisible(target))
+                ))
                 : [];
             const active = new Set(controls);
-            for (const [target, button] of buttons) {
-                if (!active.has(target) || !button.isConnected) {
-                    button.remove();
-                    buttons.delete(target);
-                    originals.delete(button);
-                }
+
+            for (const [target, entry] of groups) {
+                if (!active.has(target) || !entry.group.isConnected) removeGroup(target, entry);
             }
 
             for (const target of controls) {
-                let button = buttons.get(target);
-                if (!button) {
-                    button = document.createElement('button');
-                    button.type = 'button';
-                    button.className = 'potplayer-choice-button';
-                    button.setAttribute('data-potplayer-choice', '');
-                    buttons.set(target, button);
-                    originals.set(button, target);
+                let entry = groups.get(target);
+                if (!entry) {
+                    const group = document.createElement('span');
+                    group.className = 'potplayer-choice-group';
+                    group.setAttribute('data-potplayer-choice-group', '');
+                    group.setAttribute('role', 'group');
+                    group.setAttribute('aria-label', '选择播放方式');
+                    const webButton = createButton('web');
+                    const potPlayerButton = createButton('potplayer');
+                    group.append(webButton, potPlayerButton);
+                    entry = {
+                        target,
+                        group,
+                        webButton,
+                        potPlayerButton,
+                        originalHidden: target.hidden,
+                        originalAriaHidden: target.getAttribute('aria-hidden'),
+                    };
+                    groups.set(target, entry);
+                    originals.set(webButton, target);
+                    originals.set(potPlayerButton, target);
                 }
-                const destination = getAlternateDestination(settings);
-                const player = destination === 'web' ? '网页' : 'PotPlayer';
+
                 const mode = getMode(target);
-                const verb = mode === 'random' ? '随机播放' : mode === 'all' ? '播放全部' : '播放';
-                const label = '在' + player + '中' + verb;
-                const title = '仅本次使用' + player + '，不改变默认播放方式';
-                if (button.textContent !== label) button.textContent = label;
-                if (button.title !== title) button.title = title;
-                if (button.getAttribute('data-destination') !== destination) {
-                    button.setAttribute('data-destination', destination);
-                }
-                const height = Math.round(target.getBoundingClientRect().height) + 'px';
-                if (button.style.getPropertyValue('--potplayer-choice-height') !== height) {
-                    button.style.setProperty('--potplayer-choice-height', height);
-                }
-                if (target.nextElementSibling !== button) target.after(button);
+                updateButton(entry.webButton, 'web', mode);
+                updateButton(entry.potPlayerButton, 'potplayer', mode);
+                target.hidden = true;
+                target.setAttribute('aria-hidden', 'true');
+                target.setAttribute(ORIGINAL_ATTRIBUTE, '');
+                if (target.nextElementSibling !== entry.group) target.after(entry.group);
             }
         }
 
@@ -100,11 +141,10 @@
             getSelection(element) {
                 const button = element?.closest(BUTTON_SELECTOR);
                 const target = button && originals.get(button);
-                if (!target || !target.isConnected || !isVisible(target) || !getMode(target)) return null;
-                return {
-                    target,
-                    destination: getAlternateDestination(getSettings()),
-                };
+                const destination = button && button.getAttribute(DESTINATION_ATTRIBUTE);
+                if (!button || !target || !target.isConnected
+                    || (destination !== 'web' && destination !== 'potplayer') || !getMode(target)) return null;
+                return { target, destination };
             },
         });
     }

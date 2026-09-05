@@ -1,15 +1,15 @@
 # Emby/Jellyfin PotPlayer 播放桥
 
-在 Emby 或 Jellyfin 网页中点击播放时，自动把视频或播放列表交给 Windows 本机 PotPlayer 播放。项目由 Chrome 扩展和一个本地 Native Host 组成，当前版本为 `v0.7.2`。
+在 Emby 或 Jellyfin 网页中点击播放时，可明确选择交给网页播放器或 Windows 本机 PotPlayer。项目由 Chrome 扩展和一个本地 Native Host 组成，当前版本为 `v0.8.0`。
 
 ## 快速开始
 
 ### 直接下载 Release
 
-已发布版本见 [Releases](https://github.com/Moeary/Emby-Potplayer-Bridge/releases)。`v0.7.2` 的发布包命名如下；尚未发布时请从源码安装：
+已发布版本见 [Releases](https://github.com/Moeary/Emby-Potplayer-Bridge/releases)。`v0.8.0` 的发布包命名如下；尚未发布时请从源码安装：
 
-- `PotPlayerBridgeHost-0.7.2.exe`：本地播放桥程序。
-- `EmbyPotPlayerBridge-0.7.2-extension.zip`：Chrome 扩展，解压后用于“加载已解压的扩展”。
+- `PotPlayerBridgeHost-0.8.0.exe`：本地播放桥程序。
+- `EmbyPotPlayerBridge-0.8.0-extension.zip`：Chrome 扩展，解压后用于“加载已解压的扩展”。
 - `config.toml`：配置模板。
 - `SHA256SUMS.txt`：文件校验值。
 
@@ -46,14 +46,13 @@ pixi run deploy
 
 以后更新 Host 或扩展时再次运行 `pixi run deploy`，再在扩展页点击“重新加载”即可。部署只写当前用户的 Native Messaging 注册表项，不修改 Chrome 用户数据目录。
 
-## 每次选择播放方式
+## 两种播放方式
 
-原“播放”按钮遵循扩展里保存的默认设置。详情页播放按钮右侧提供一次性选择：
+详情页和列表工具栏的播放控件会显示一个固定的连体双按钮：
 
-- 默认使用 PotPlayer 时，显示“在网页中播放”。
-- 默认使用网页时，显示“在 PotPlayer 中播放”。
-- 临时选择不会更改默认值，PotPlayer 的断点恢复和同步设置仍然生效。
-- 列表工具栏的“播放全部”和“随机播放”也支持对应的一次性选择；未获准的站点不显示此按钮。
+- 左侧“在网页中播放”：调用 Emby/Jellyfin 原本的网页播放器。
+- 右侧“在PotPlayer中播放”：解析当前项目或播放列表，并交给本机 PotPlayer。
+- 两个入口方向固定，不读取、不保存默认播放器状态；未获准的站点不显示这组按钮。
 
 更新扩展后，请在 Chrome 扩展管理页重新加载，并刷新已打开的 Emby/Jellyfin 标签页。
 

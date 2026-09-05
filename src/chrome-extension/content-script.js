@@ -29,6 +29,7 @@
     const settingsApi = globalThis.PotPlayerSettings;
     let settings = null;
     let playbackGeneration = 0;
+    let settingsLoadGeneration = 0;
     const choiceUi = globalThis.PotPlayerPlaybackChoice?.create({
         getSettings: () => settings,
         getMode: (target) => getPlaybackMode(target),
@@ -37,8 +38,6 @@
     function normalizeSettings(raw) {
         if (settingsApi && typeof settingsApi.normalize === 'function') return settingsApi.normalize(raw);
         return {
-            enabled: true,
-            defaultPlayer: 'potplayer',
             requestTimeoutSeconds: 120,
             fallbackToBrowser: true,
             allowedOrigins: [location.origin],
@@ -48,15 +47,31 @@
     }
 
     function loadSettings() {
-        chrome.storage.local.get(null, (values) => {
-            const nextSettings = normalizeSettings(values);
-            if (settings && (settings.defaultPlayer !== nextSettings.defaultPlayer
-                || settings.allowedOrigins.join() !== nextSettings.allowedOrigins.join())) {
+        const generation = ++settingsLoadGeneration;
+        const apply = (raw) => {
+            if (generation !== settingsLoadGeneration) return;
+            const nextSettings = normalizeSettings(raw);
+            if (settings && settings.allowedOrigins.join() !== nextSettings.allowedOrigins.join()) {
                 cancelPendingPlayback();
             }
             settings = nextSettings;
             choiceUi?.refresh();
-        });
+        };
+        const fallbackToStorage = () => {
+            chrome.storage.local.get(null, (values) => apply(values));
+        };
+        try {
+            chrome.runtime.sendMessage({ type: 'get-settings' }, (response) => {
+                const lastError = chrome.runtime.lastError;
+                if (!lastError && response?.ok === true && response.settings) {
+                    apply(response.settings);
+                    return;
+                }
+                fallbackToStorage();
+            });
+        } catch (_) {
+            fallbackToStorage();
+        }
     }
 
     loadSettings();
@@ -144,10 +159,6 @@
 
     function isAllowedSite() {
         return settings && settings.allowedOrigins.includes(location.origin);
-    }
-
-    function isPotPlayerDefault() {
-        return Boolean(settings && settings.defaultPlayer === 'potplayer');
     }
 
     function cancelPendingPlayback() {
@@ -279,7 +290,7 @@
         }
     }
 
-    function requestPlayback(target, mode, context, destination = 'default') {
+    function requestPlayback(target, mode, context, destination = 'potplayer') {
         cancelPendingPlayback();
         const requestId = String(Date.now()) + '-' + Math.random().toString(36).slice(2);
         const requestSettings = settings || normalizeSettings({});
@@ -371,27 +382,24 @@
         if (!isAllowedSite()) return;
 
         const choice = choiceUi?.getSelection(target);
-        const original = choice ? choice.target : target;
+        if (!choice) return;
+        const original = choice.target;
         const mode = getPlaybackMode(original);
         if (!mode) return;
 
-        if (choice?.destination === 'web') {
+        if (choice.destination === 'web') {
             event.preventDefault();
             event.stopImmediatePropagation();
             playInBrowser(original);
             return;
         }
-
-        if (!choice && !isPotPlayerDefault()) {
-            cancelPendingPlayback();
-            return;
-        }
+        if (choice.destination !== 'potplayer') return;
         const context = findContext(original);
         if (mode !== 'single' && !context.parentId && !context.itemId) return;
         if (mode === 'single' && !context.itemId) return;
 
         event.preventDefault();
         event.stopImmediatePropagation();
-        requestPlayback(original, mode, context, choice ? 'potplayer' : 'default');
+        requestPlayback(original, mode, context, 'potplayer');
     }, true);
 })();
