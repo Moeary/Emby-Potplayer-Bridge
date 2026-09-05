@@ -91,6 +91,13 @@ test('兼容旧版字符串配置，false 仍表示默认网页', async () => {
     assert.equal(worker.nativeRequests.length, 1);
 });
 
+test('显式网页默认优先于旧版 enabled 值', async () => {
+    const worker = createWorker({ enabled: true, defaultPlayer: 'web' });
+    assert.equal((await worker.send(play())).ok, false);
+    assert.equal((await worker.send(play('potplayer'))).ok, true);
+    assert.equal(worker.nativeRequests.length, 1);
+});
+
 test('默认 PotPlayer 时，普通请求仍按原模式启动', async () => {
     const worker = createWorker();
     assert.equal((await worker.send(play())).ok, true);

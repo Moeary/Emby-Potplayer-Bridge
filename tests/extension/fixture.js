@@ -2,7 +2,7 @@
 
 (() => {
     const PAGE_SOURCE = 'codex-emby-jellyfin-potplayer-page';
-    const values = { enabled: true, allowedOrigins: [location.origin], syncPlayback: false };
+    const values = { enabled: true, defaultPlayer: 'potplayer', allowedOrigins: [location.origin], syncPlayback: false };
     const changes = [];
     const requests = [];
     const nativeCalls = [];
@@ -39,7 +39,11 @@
     };
 
     function setDefaults(updates) {
+        const hasDefaultPlayer = Object.prototype.hasOwnProperty.call(updates, 'defaultPlayer');
         Object.assign(values, updates);
+        if (Object.prototype.hasOwnProperty.call(updates, 'enabled') && !hasDefaultPlayer) {
+            values.defaultPlayer = updates.enabled ? 'potplayer' : 'web';
+        }
         changes.forEach((fn) => fn({}, 'local'));
         showActivity();
     }

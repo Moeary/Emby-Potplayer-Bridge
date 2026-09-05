@@ -1,15 +1,15 @@
 # Emby/Jellyfin PotPlayer 播放桥
 
-在 Emby 或 Jellyfin 网页中点击播放时，自动把视频或播放列表交给 Windows 本机 PotPlayer 播放。项目由 Chrome 扩展和一个本地 Native Host 组成，当前版本为 `v0.7.1`。
+在 Emby 或 Jellyfin 网页中点击播放时，自动把视频或播放列表交给 Windows 本机 PotPlayer 播放。项目由 Chrome 扩展和一个本地 Native Host 组成，当前版本为 `v0.7.2`。
 
 ## 快速开始
 
 ### 直接下载 Release
 
-已发布版本见 [Releases](https://github.com/Moeary/Emby-Potplayer-Bridge/releases)。`v0.7.1` 的发布包命名如下；尚未发布时请从源码安装：
+已发布版本见 [Releases](https://github.com/Moeary/Emby-Potplayer-Bridge/releases)。`v0.7.2` 的发布包命名如下；尚未发布时请从源码安装：
 
-- `PotPlayerBridgeHost-0.7.1.exe`：本地播放桥程序。
-- `EmbyPotPlayerBridge-0.7.1-extension.zip`：Chrome 扩展，解压后用于“加载已解压的扩展”。
+- `PotPlayerBridgeHost-0.7.2.exe`：本地播放桥程序。
+- `EmbyPotPlayerBridge-0.7.2-extension.zip`：Chrome 扩展，解压后用于“加载已解压的扩展”。
 - `config.toml`：配置模板。
 - `SHA256SUMS.txt`：文件校验值。
 

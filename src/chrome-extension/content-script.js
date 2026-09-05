@@ -38,6 +38,7 @@
         if (settingsApi && typeof settingsApi.normalize === 'function') return settingsApi.normalize(raw);
         return {
             enabled: true,
+            defaultPlayer: 'potplayer',
             requestTimeoutSeconds: 120,
             fallbackToBrowser: true,
             allowedOrigins: [location.origin],
@@ -49,7 +50,7 @@
     function loadSettings() {
         chrome.storage.local.get(null, (values) => {
             const nextSettings = normalizeSettings(values);
-            if (settings && (settings.enabled !== nextSettings.enabled
+            if (settings && (settings.defaultPlayer !== nextSettings.defaultPlayer
                 || settings.allowedOrigins.join() !== nextSettings.allowedOrigins.join())) {
                 cancelPendingPlayback();
             }
@@ -143,6 +144,10 @@
 
     function isAllowedSite() {
         return settings && settings.allowedOrigins.includes(location.origin);
+    }
+
+    function isPotPlayerDefault() {
+        return Boolean(settings && settings.defaultPlayer === 'potplayer');
     }
 
     function cancelPendingPlayback() {
@@ -377,7 +382,7 @@
             return;
         }
 
-        if (!choice && settings.enabled === false) {
+        if (!choice && !isPotPlayerDefault()) {
             cancelPendingPlayback();
             return;
         }

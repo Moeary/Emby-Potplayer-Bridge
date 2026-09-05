@@ -8,6 +8,15 @@
         '.itemsViewSettingsContainer button', '.itemsViewSettingsContainer a',
     ].join(',');
 
+    function getDefaultDestination(settings) {
+        const configured = settings && settings.defaultPlayer;
+        if (configured === 'web' || configured === 'potplayer') return configured;
+        return settings && settings.enabled === false ? 'web' : 'potplayer';
+    }
+
+    function getAlternateDestination(settings) {
+        return getDefaultDestination(settings) === 'potplayer' ? 'web' : 'potplayer';
+    }
     function create({ getSettings, getMode }) {
         const buttons = new Map();
         const originals = new WeakMap();
@@ -47,7 +56,7 @@
                     buttons.set(target, button);
                     originals.set(button, target);
                 }
-                const destination = settings.enabled === false ? 'potplayer' : 'web';
+                const destination = getAlternateDestination(settings);
                 const player = destination === 'web' ? '网页' : 'PotPlayer';
                 const mode = getMode(target);
                 const verb = mode === 'random' ? '随机播放' : mode === 'all' ? '播放全部' : '播放';
@@ -94,7 +103,7 @@
                 if (!target || !target.isConnected || !isVisible(target) || !getMode(target)) return null;
                 return {
                     target,
-                    destination: getSettings()?.enabled === false ? 'potplayer' : 'web',
+                    destination: getAlternateDestination(getSettings()),
                 };
             },
         });

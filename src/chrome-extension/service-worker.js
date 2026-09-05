@@ -28,7 +28,7 @@ function readSettings() {
 async function initializeSettings() {
     const values = await readSettings();
     await chrome.storage.local.set(values);
-    updateBadge(values.enabled);
+    updateBadge(values.defaultPlayer === 'potplayer');
     await scheduleDynamicContentSync();
 }
 
@@ -43,7 +43,7 @@ chrome.runtime.onStartup.addListener(() => {
 chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
     void readSettings().then((values) => {
-        updateBadge(values.enabled);
+        updateBadge(values.defaultPlayer === 'potplayer');
         return scheduleDynamicContentSync();
     }).catch((error) => console.warn('[PotPlayer Bridge]', error));
 });
@@ -78,7 +78,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 sendResponse({ ok: false, error: '当前网页不在允许使用的站点中' });
                 return;
             }
-            if (!settings.enabled && payload.destination !== 'potplayer') {
+            if (settings.defaultPlayer !== 'potplayer' && payload.destination !== 'potplayer') {
                 sendResponse({ ok: false, error: 'PotPlayer 外部播放已关闭' });
                 return;
             }

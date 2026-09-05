@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Emby/Jellyfin PotPlayer 播放桥",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": "把 Emby/Jellyfin 的单项播放、播放全部和随机播放交给本机 PotPlayer。",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApx0zYqGhkloLZc7JNott7VWMvPe0Yk7minvJHrWPadpJVypr1PB2PSHTTi43gqppEQd1Fw2RAhPSdWArqyUSOHc5U7AA6nwQ179f7tz0RUzwon0tDW6CuOXbk7joZRBj5XfAnKVgTNxftDk0+sVv5Vqw+uQLrjVdx+3WjJ5yMYrOkS10hKpBLztz5sQPJKXsG9BMvHSf27razaJlsFjyUksFcVKpo89hqZJ7LG2IrlrP1j6Vu1tnhMSFNo4rxcUsqYYwwkD8+Ax+/AIrlzlET9zmIdy79Imti9ja9OvEqmwVD5E/HzccvmF5iH/OnlExbcsY049K56yuhh9iv+H9nQIDAQAB",
   "permissions": [
