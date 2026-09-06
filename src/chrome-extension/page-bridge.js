@@ -282,7 +282,18 @@
     }
 
     async function resolveSingle(adapter, api, userId, context, settings) {
-        const item = await adapterCore.getItem(api, userId, context.itemId);
+        const item = context.itemId
+            ? await adapterCore.getItem(api, userId, context.itemId)
+            : typeof adapterCore.findItemByName === 'function'
+                ? await adapterCore.findItemByName(
+                    api,
+                    userId,
+                    context.parentId,
+                    context.itemName,
+                    settings.maxPlaylistItems,
+                )
+                : null;
+        if (!item) throw new Error('未找到当前视频条目');
         const candidates = await adapterCore.getSingleCandidates(
             api,
             userId,

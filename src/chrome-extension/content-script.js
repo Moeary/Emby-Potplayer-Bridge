@@ -250,6 +250,7 @@
     function findItemId(target) {
         const pageItemId = getPageItemId();
         let node = target;
+        let sawItemScope = false;
         for (let depth = 0; node && depth < 10; depth += 1, node = node.parentElement) {
             const hrefId = findIdInUrl(node.getAttribute && (
                 node.getAttribute('href') || node.getAttribute('data-href')
@@ -260,6 +261,7 @@
             if (explicit && isItemScope(node)) return explicit;
 
             if (isItemScope(node)) {
+                sawItemScope = true;
                 const image = node.querySelector && node.querySelector(
                     'img[src*="/Items/" i], img[data-src*="/Items/" i]',
                 );
@@ -269,18 +271,41 @@
                     || image.getAttribute('data-href'),
                 );
                 if (imageId) return imageId;
-                return '';
             }
         }
-        return pageItemId;
+        return sawItemScope ? '' : pageItemId;
+    }
+
+    function findItemName(target) {
+        let node = target;
+        for (let depth = 0; node && depth < 10; depth += 1, node = node.parentElement) {
+            const directName = node.getAttribute && (
+                node.getAttribute('data-item-name') || node.getAttribute('data-name')
+            );
+            if (directName) return String(directName).replace(/\s+/g, ' ').trim();
+
+            const named = node.querySelector && node.querySelector(
+                '.cardText [title], .cardMediaInfoItem[title], .listItemBodyText [title], '
+                + '[data-item-name], [data-name]',
+            );
+            if (!named) continue;
+            const value = named.getAttribute('data-item-name')
+                || named.getAttribute('data-name')
+                || named.getAttribute('title')
+                || named.textContent;
+            if (value) return String(value).replace(/\s+/g, ' ').trim();
+        }
+        return '';
     }
 
     function findContext(target) {
         const hash = getHashParams();
+        const itemId = findItemId(target);
         return {
             parentId: hash.get('parentId') || '',
             serverId: hash.get('serverId') || '',
-            itemId: findItemId(target),
+            itemId,
+            itemName: itemId ? '' : findItemName(target),
             pageItemId: getPageItemId(),
             provider: getSiteProvider(),
         };
@@ -406,7 +431,7 @@
         }
         const context = findContext(original);
         if (mode !== 'single' && !context.parentId && !context.itemId) return;
-        if (mode === 'single' && !context.itemId) return;
+        if (mode === 'single' && !context.itemId && !(context.parentId && context.itemName)) return;
 
         event.preventDefault();
         event.stopImmediatePropagation();

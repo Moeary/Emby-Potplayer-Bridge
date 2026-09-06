@@ -15,6 +15,12 @@
     .btnResume, .btnPlay, .btnShuffle { font: inherit; font-weight: 600; color: inherit; border: 0; border-radius: 999px; background: #404040; padding: 14px 24px; margin: 0 .6em .6em 0; cursor: pointer; }
     .btnResume { min-width: 120px; }
     .btnResume .icon { margin-right: 10px; }
+    .card { width: 280px; }
+    .cardBox { border: 1px solid #555; border-radius: 12px; overflow: hidden; background: #303030; }
+    .cardOverlayContainer { height: 140px; display: grid; place-items: center; }
+    .cardOverlayFab-primary { width: 56px; height: 56px; border: 0; border-radius: 50%; background: #f05; color: #fff; font-size: 24px; cursor: pointer; }
+    .cardText { padding: 12px; }
+    .cardMediaInfoItem { border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
     .detailButton-highres { display: none; }
     .tools { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
     .tools button, select { padding: 10px 14px; font: inherit; border-radius: 8px; border: 1px solid #666; cursor: pointer; }
@@ -45,6 +51,19 @@
         <button type="button" class="favorite" aria-label="收藏">♡</button>
     </div>
     <p>原始播放按钮遵循默认方式；旁边的连体双图标按钮可单独选择网页或 PotPlayer，悬停时显示详细提示。</p>
+</section>
+<section class="stage" id="ordinary-card-stage">
+    <h2>普通视频卡片 · EP4</h2>
+    <div class="card virtualScrollItem">
+        <div class="cardBox">
+            <div class="cardOverlayContainer" data-action="link">
+                <button id="ordinary-card-play" type="button" data-action="play" class="cardOverlayFab-primary" aria-label="播放">▶</button>
+            </div>
+            <div class="cardText">
+                <button type="button" title="普通视频 EP4" class="cardMediaInfoItem" data-action="link">普通视频 EP4</button>
+            </div>
+        </div>
+    </div>
 </section>
 <div class="itemsViewSettingsContainer">
     <button type="button" class="btnPlay">播放全部</button>

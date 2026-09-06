@@ -144,6 +144,63 @@
         }
         return all;
     }
+    function comparableItemName(value) {
+        return String(value || '')
+            .replace(/\.(?:3gp|avi|flv|m2ts|m4v|mkv|mov|mp4|mpeg|mpg|ts|webm|wmv)$/i, '')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .toLowerCase();
+    }
+
+    function itemNameCandidates(item) {
+        const path = String(item && item.Path || '');
+        const basename = path.split(/[\\/]/).pop();
+        return [item && item.Name, item && item.SortName, basename]
+            .filter(Boolean);
+    }
+
+    function matchesItemName(item, name) {
+        const expected = comparableItemName(name);
+        return Boolean(expected && itemNameCandidates(item)
+            .some((candidate) => comparableItemName(candidate) === expected));
+    }
+
+    async function findItemByName(api, userId, parentId, name, maxItems = DEFAULT_MAX_ITEMS) {
+        const query = String(name || '').trim();
+        if (!api || typeof api.getItems !== 'function' || !query) return null;
+
+        const options = {
+            Recursive: false,
+            IncludeItemTypes: 'Movie,Episode,Video,MusicVideo,Trailer,HomeVideo,AdultVideo,Program,ChannelVideo',
+            SortBy: 'SortName',
+            SortOrder: 'Ascending',
+            Fields: itemFields(),
+        };
+        if (parentId) options.ParentId = parentId;
+
+        let candidates = [];
+        try {
+            const result = await api.getItems(userId, {
+                ...options,
+                SearchTerm: query,
+                StartIndex: 0,
+                Limit: Math.min(50, Math.max(1, Number(maxItems) || DEFAULT_MAX_ITEMS)),
+            });
+            candidates = Array.isArray(result) ? result : result && Array.isArray(result.Items) ? result.Items : [];
+        } catch (_) {
+            // 某些 Emby/Jellyfin 版本不接受 SearchTerm，继续使用目录分页兜底。
+        }
+        const exact = candidates.find((item) => matchesItemName(item, query));
+        if (exact) return exact;
+
+        try {
+            const listed = await getAllItems(api, userId, options, maxItems);
+            candidates = candidates.concat(listed);
+        } catch (_) {
+            // 搜索和目录查询均失败时由调用方给出统一错误。
+        }
+        return candidates.find((item) => matchesItemName(item, query)) || null;
+    }
 
     async function getEpisodesEndpoint(api, userId, parentId, maxItems) {
         if (!api || typeof api.getEpisodes !== 'function') return [];
@@ -432,6 +489,7 @@
         getItem,
         getMediaSources,
         getAllItems,
+        findItemByName,
         getSingleCandidates,
         getPlaylistItems,
         getAccessToken,

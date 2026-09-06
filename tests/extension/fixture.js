@@ -60,10 +60,12 @@
     }
 
     function respond(request) {
+        const itemId = request.context.itemId
+            || (request.context.itemName === '普通视频 EP4' ? 'ep4' : '');
         window.postMessage({
             source: PAGE_SOURCE, type: 'codex-potplayer-response',
             requestId: request.requestId, mode: request.mode, ok: true,
-            items: [{ itemId: request.context.itemId, title: 'episode', url: location.origin + '/video.mkv' }],
+            items: [{ itemId, title: 'episode', url: location.origin + '/video.mkv' }],
         }, '*');
     }
 
@@ -85,6 +87,7 @@
         setTimeout(() => requestAnimationFrame(() => requestAnimationFrame(resolve)), 0);
     });
     const primary = () => document.querySelector('#detail-controls .btnResume');
+    const ordinaryPlay = () => document.querySelector('#ordinary-card-play');
     const groupFor = (target) => target && target.nextElementSibling?.matches('[data-potplayer-choice-group]')
         ? target.nextElementSibling : null;
     const buttonFor = (target, destination) => groupFor(target)?.querySelector(
@@ -133,6 +136,27 @@
                 assert(nativeCalls.length === before + 1, '默认 PotPlayer 请求未发送');
                 assert(call.destination === 'potplayer', '默认目标不是 PotPlayer');
                 assert(call.items[0].itemId === 'ep4', '默认播放条目错误');
+            });
+            await check('普通视频卡片也遵循默认 PotPlayer', async () => {
+                const oldHash = location.hash;
+                try {
+                    setDefaultPlayer('potplayer');
+                    location.hash = '!/item?id=detail&parentId=folder&serverId=fixture';
+                    await settle();
+                    const before = nativeCalls.length;
+                    const requestBefore = requests.length;
+                    ordinaryPlay().click(); await settle();
+                    const call = nativeCalls.at(-1);
+                    const request = requests.at(-1);
+                    assert(nativeCalls.length === before + 1, '普通视频未发送 PotPlayer 请求');
+                    assert(call.destination === 'potplayer', '普通视频默认目标不是 PotPlayer');
+                    assert(call.items[0].itemId === 'ep4', '普通视频条目 ID 错误');
+                    assert(requests.length === requestBefore + 1, '普通视频未建立解析请求');
+                    assert(request.context.itemName === '普通视频 EP4', '普通视频未携带卡片名称');
+                } finally {
+                    location.hash = oldHash;
+                    await settle();
+                }
             });
             await check('默认网页时原始播放按钮放行网页播放器', async () => {
                 setDefaultPlayer('web'); await settle();
