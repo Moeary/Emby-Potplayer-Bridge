@@ -78,7 +78,7 @@
 
     // 模拟网页原有的冒泡事件处理；被插件拦截的点击不应到达这里。
     document.addEventListener('click', (event) => {
-        const target = event.target.closest('.btnResume, .btnPlay, .btnShuffle');
+        const target = event.target.closest('.btnResume, .btnPlay, .btnShuffle, .card [data-action="play"]');
         if (target) { webCalls += 1; showActivity(); }
     });
 
@@ -137,22 +137,19 @@
                 assert(call.destination === 'potplayer', '默认目标不是 PotPlayer');
                 assert(call.items[0].itemId === 'ep4', '默认播放条目错误');
             });
-            await check('普通视频卡片也遵循默认 PotPlayer', async () => {
+            await check('普通视频卡片始终交给网页播放器', async () => {
                 const oldHash = location.hash;
                 try {
                     setDefaultPlayer('potplayer');
                     location.hash = '!/item?id=detail&parentId=folder&serverId=fixture';
                     await settle();
+                    const webBefore = webCalls;
                     const before = nativeCalls.length;
                     const requestBefore = requests.length;
                     ordinaryPlay().click(); await settle();
-                    const call = nativeCalls.at(-1);
-                    const request = requests.at(-1);
-                    assert(nativeCalls.length === before + 1, '普通视频未发送 PotPlayer 请求');
-                    assert(call.destination === 'potplayer', '普通视频默认目标不是 PotPlayer');
-                    assert(call.items[0].itemId === 'ep4', '普通视频条目 ID 错误');
-                    assert(requests.length === requestBefore + 1, '普通视频未建立解析请求');
-                    assert(request.context.itemName === '普通视频 EP4', '普通视频未携带卡片名称');
+                    assert(webCalls === webBefore + 1, '普通视频未交给网页播放器');
+                    assert(nativeCalls.length === before, '普通视频被自动接管到 PotPlayer');
+                    assert(requests.length === requestBefore, '普通视频不应建立 PotPlayer 解析请求');
                 } finally {
                     location.hash = oldHash;
                     await settle();

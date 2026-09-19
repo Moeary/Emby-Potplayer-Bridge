@@ -24,6 +24,16 @@
         '.btnPlayAll',
         '.btnShuffle',
     ].join(',');
+    const ORDINARY_CARD_SELECTOR = [
+        '.card',
+        '.cardBox',
+        '.listItem',
+        '.itemTile',
+        '.itemCell',
+        '.libraryItem',
+        '.mediaItem',
+        '.virtualScrollItem',
+    ].join(',');
     const bypassClicks = new WeakSet();
     const pending = new Map();
     const settingsApi = globalThis.PotPlayerSettings;
@@ -161,6 +171,10 @@
         if (!target || target.closest('[data-potplayer-choice]')
             || target.disabled || target.getAttribute('aria-disabled') === 'true') return '';
         return getPlaylistMode(target) || (isPlaybackClick(target) ? 'single' : '');
+    }
+
+    function isOrdinaryCardPlayback(target, mode) {
+        return mode === 'single' && Boolean(target && target.closest(ORDINARY_CARD_SELECTOR));
     }
 
     function isAllowedSite() {
@@ -421,6 +435,11 @@
             event.preventDefault();
             event.stopImmediatePropagation();
             playInBrowser(original);
+            return;
+        }
+        // 普通卡片的播放覆盖层交给 Emby/Jellyfin 网页处理；默认播放器只接管详情页和列表工具栏入口。
+        if (!choice && isOrdinaryCardPlayback(original, mode)) {
+            cancelPendingPlayback();
             return;
         }
         const usePotPlayer = choice?.destination === 'potplayer'
