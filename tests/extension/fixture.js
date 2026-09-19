@@ -128,6 +128,10 @@
                 assert(buttonFor(original, 'web').clientWidth < 80 && buttonFor(original, 'potplayer').clientWidth < 80, '图标按钮没有收窄');
                 assert(original.nextElementSibling === group, '辅助按钮没有紧邻原始按钮');
             });
+            await check('排序控件不生成播放方式辅助按钮', async () => {
+                const sortButton = document.querySelector('.btnSort');
+                assert(sortButton && !groupFor(sortButton), '排序控件被误判为随机播放');
+            });
             await check('默认 PotPlayer 时原始播放按钮发送 EP4', async () => {
                 setDefaultPlayer('potplayer'); await settle();
                 const before = nativeCalls.length;

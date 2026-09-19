@@ -142,7 +142,7 @@
         const action = getAction(element);
         const label = getButtonLabel(element);
         if (element.matches('.btnShuffle, [data-action="shuffle" i], [data-action="random" i]')
-            || /随机播放|随机|shuffle|random/i.test(label)
+            || /随机\s*播放|播放\s*随机|shuffle(?:\s+play)?|random\s+play|play\s+random/i.test(label)
             || /^(?:play[-_ ]?)?(?:shuffle|random)$/.test(action)) return 'random';
         if (element.matches(
             '.itemsViewSettingsContainer .btnPlay, '
